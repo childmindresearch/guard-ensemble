@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+venv/
+.env
+out/
+scores_*.csv
+*.pyc
+raw_responses.jsonl
