@@ -18,6 +18,7 @@ from guards import (
     RISK_LEVELS,
     deliberation_build,
     deliberation_parse,
+    load_deliberation_prompt,
     shieldgemma_aggregate,
 )
 
@@ -115,12 +116,12 @@ def call_llm(guard, text):
 # Deliberation stage — runs after all guards, one call per row
 # ---------------------------------------------------------------------------
 
-def call_deliberator(text: str, guard_scores: dict) -> str:
+def call_deliberator(text: str, guard_scores: dict, deliberation_prompt: str | None = None) -> str:
     """Call the general-purpose deliberator model for a single row.
 
     Network function, same seam discipline as call_llm.
     """
-    prompt = deliberation_build(text, guard_scores)
+    prompt = deliberation_build(text, guard_scores, prompt=deliberation_prompt)
     body = {
         "model": DELIBERATION_MODEL_ID,
         "temperature": 0,
@@ -148,7 +149,7 @@ def _guard_scores_from_row(row) -> dict:
     }
 
 
-def run_deliberation(df):
+def run_deliberation(df, deliberation_prompt: str | None = None):
     """Add a `deliberation_risk` column: one deliberator call per row."""
     risks = []
     for _, row in df.iterrows():
@@ -158,7 +159,7 @@ def run_deliberation(df):
         if failed:
             scores["_guard_models_unavailable"] = ", ".join(failed)
         try:
-            risks.append(deliberation_parse(call_deliberator(row["text"], scores)))
+            risks.append(deliberation_parse(call_deliberator(row["text"], scores, deliberation_prompt)))
         except Exception as e:
             risks.append(f"error: {e}")
     df = df.copy()
@@ -170,7 +171,7 @@ def run_deliberation(df):
 # Pipeline
 # ---------------------------------------------------------------------------
 
-def run(texts, output_path, skip_deliberation=False):
+def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | None = None):
     rows = []
     for i, text in enumerate(texts):
         row = {"id": i, "text": text}
@@ -201,7 +202,7 @@ def run(texts, output_path, skip_deliberation=False):
         )
 
     if not skip_deliberation:
-        df = run_deliberation(df)
+        df = run_deliberation(df, deliberation_prompt)
 
     df.to_csv(output_path, index=False)
     return df
@@ -211,7 +212,7 @@ def run(texts, output_path, skip_deliberation=False):
 # Dry-run
 # ---------------------------------------------------------------------------
 
-def dry_run(texts):
+def dry_run(texts, deliberation_prompt: str | None = None):
     for text in texts:
         for guard in GUARDS:
             prompt = guard.build(text)
@@ -220,7 +221,7 @@ def dry_run(texts):
                     print(f"[{guard.name}] {p}")
             else:
                 print(f"[{guard.name}] {prompt}")
-        print(f"[deliberator] {deliberation_build(text, {'_note': 'dry-run placeholder scores'})}")
+        print(f"[deliberator] {deliberation_build(text, {'_note': 'dry-run placeholder scores'}, prompt=deliberation_prompt)}")
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +254,16 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Print prompts only")
     parser.add_argument("--demo", action="store_true", help="Use demo texts")
     parser.add_argument("--skip-deliberation", action="store_true", help="Skip deliberation stage")
+    parser.add_argument("--deliberation-prompt", default=None, help="Path to custom deliberation prompt template file")
     args = parser.parse_args()
+
+    # Load deliberation prompt (fail fast — before any guard calls)
+    try:
+        deliberation_prompt = load_deliberation_prompt(args.deliberation_prompt)
+    except FileNotFoundError as e:
+        parser.error(f"deliberation prompt file not found: {e}")
+    except ValueError as e:
+        parser.error(f"deliberation prompt validation failed: {e}")
 
     if args.input is None:
         args.demo = True
@@ -265,10 +275,10 @@ def main():
         texts = df_in[args.text_col].tolist()
 
     if args.dry_run:
-        dry_run(texts)
+        dry_run(texts, deliberation_prompt=deliberation_prompt)
         return
 
-    df = run(texts, args.output, skip_deliberation=args.skip_deliberation)
+    df = run(texts, args.output, skip_deliberation=args.skip_deliberation, deliberation_prompt=deliberation_prompt)
     _summary(df)
 
 
