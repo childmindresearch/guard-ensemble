@@ -72,6 +72,26 @@ bash serve.sh --kill
 | `--dry-run` | `false` | Print built prompts only, no network calls |
 | `--demo` | `false` | Use built-in demo texts (auto-enabled when `--input` is omitted) |
 | `--skip-deliberation` | `false` | Skip the deliberation stage; emit only guard scores |
+| `--deliberation-prompt` | `prompts/deliberator.txt` | Path to custom deliberation prompt template file |
+
+## Deliberator prompt
+
+The deliberator prompt is loaded from `prompts/deliberator.txt` by default. Override with `--deliberation-prompt path/to/custom.txt`.
+
+The prompt file is a `string.Template` with two placeholders:
+
+| Placeholder | Substituted with |
+|---|---|
+| `$text` | The original input text |
+| `$scores_block` | Guard model ratings (bullet list, or "none available" if all guards failed) |
+
+The file must contain the three risk level definitions (`high_risk`, `concerning`, `no_low_risk`) or the parser will reject the deliberator's output.
+
+**Example**:
+
+```bash
+python risk_pipeline.py --input texts.csv --deliberation-prompt my_prompt.txt
+```
 
 ## Column dictionary
 
