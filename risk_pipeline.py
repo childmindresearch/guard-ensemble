@@ -16,6 +16,7 @@ from guards import (
     DELIBERATION_PATH,
     GUARDS,
     RISK_LEVELS,
+    _shieldgemma_parse_all,
     deliberation_build,
     deliberation_parse,
     load_deliberation_prompt,
@@ -179,7 +180,7 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
             try:
                 raw = call_llm(guard, text)
                 if isinstance(raw, list):  # ShieldGemma
-                    parsed = [guard.parse(r) for r in raw]
+                    parsed = _shieldgemma_parse_all(raw)
                     row.update(shieldgemma_aggregate(parsed))
                 else:
                     row.update(guard.parse(raw))
@@ -196,7 +197,7 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
             lambda r: ";".join(
                 f"{col.replace('_error', '')}:{val}"
                 for col, val in r.items()
-                if val
+                if pd.notna(val) and val
             ),
             axis=1,
         )
