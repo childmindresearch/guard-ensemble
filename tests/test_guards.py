@@ -345,7 +345,7 @@ class TestExtractVerdict:
         assert _extract_verdict("I am not sure about the safety of this content.") is None
 
     def test_think_prefixed_input(self):
-        raw = "<think>The user is asking something harmless.\n</think>Yes"
+        raw = "<antThinking>The user is asking something harmless.\n</antThinking>Yes"
         assert _extract_verdict(strip_think(raw)) == "yes"
 
 
@@ -354,16 +354,16 @@ class TestExtractVerdict:
 # ---------------------------------------------------------------------------
 
 class TestStripThink:
-    """strip_think must remove </think> blocks reliably."""
+    """strip_think must remove <antThinking> blocks reliably."""
 
     def test_complete_block(self):
-        assert strip_think("</think>thinking here\n</think>safe") == "safe"
+        assert strip_think("<antThinking>thinking here\n</antThinking>safe") == "safe"
 
     def test_unterminated_tail(self):
-        assert strip_think("</think>thinking without close\nresult") == "result"
+        assert strip_think("<antThinking>thinking without close\nresult") == "result"
 
     def test_malformed_tags(self):
-        assert strip_think("</think>thinking\n</think>") == ""
+        assert strip_think("<antThinking>thinking\n</antThinking>") == ""
 
     def test_empty_string(self):
         assert strip_think("") == ""
@@ -400,19 +400,29 @@ class TestGraniteGuardianParseRealistic:
 # ---------------------------------------------------------------------------
 
 class TestDeliberationParseThinkPrefixed:
-    """deliberation_parse must succeed after stripping </think> blocks."""
+    """deliberation_parse must succeed after stripping </antThinking> blocks."""
 
     def test_think_prefixed_high_risk(self):
-        raw = "</think>Analyzing the guard model scores... The entry shows clear violation.\n</think>high_risk"
+        raw = "<antThinking>Analyzing the guard model scores... The entry shows clear violation.\n</antThinking>high_risk"
         assert deliberation_parse(raw) == "high_risk"
 
     def test_think_prefixed_concerning(self):
-        raw = "</think>The signals are mixed, not clearly harmful.\n</think>concerning"
+        raw = "<antThinking>The signals are mixed, not clearly harmful.\n</antThinking>concerning"
         assert deliberation_parse(raw) == "concerning"
 
     def test_think_prefixed_no_low_risk(self):
-        raw = "</think>Nothing dangerous detected.\n</think>no_low_risk"
+        raw = "<antThinking>Nothing dangerous detected.\n</antThinking>no_low_risk"
         assert deliberation_parse(raw) == "no_low_risk"
+
+
+class TestDeliberationParseNoStdout:
+    """deliberation_parse must not print to stdout."""
+
+    def test_no_stdout_output(self, capsys):
+        deliberation_parse("high_risk")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
 
 
 # ---------------------------------------------------------------------------

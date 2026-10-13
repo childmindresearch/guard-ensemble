@@ -118,9 +118,9 @@ def qwen_guard_build(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def strip_think(raw: str) -> str:
-    """Remove <think> blocks and unterminated trailing fragments."""
-    raw = re.sub(r"<think>.*?", "", raw, flags=re.DOTALL)
-    raw = re.sub(r"<think>.*", "", raw, flags=re.DOTALL)
+    """Remove <antThinking> blocks and unterminated trailing fragments."""
+    raw = re.sub(r"<antThinking>.*?</antThinking>", "", raw, flags=re.DOTALL)
+    raw = re.sub(r"<antThinking>.*", "", raw, flags=re.DOTALL)
     return raw.strip()
 
 _SHIELDGEMMA_YES_RE = re.compile(r"^\s*([Yy][Ee]?[Ss]|[Nn][Oo]?)")
