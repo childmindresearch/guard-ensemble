@@ -2,6 +2,7 @@
 import sys
 from unittest import mock
 
+import pandas as pd
 import pytest
 from risk_pipeline import call_deliberator, dry_run, run, run_deliberation
 
@@ -144,3 +145,83 @@ class TestShieldGemmaPerPolicy:
         assert row["shieldgemma_p_harassment"] == 1
         assert row["shieldgemma_p_hate_speech"] == 0
         assert row["shieldgemma_p_sexually_explicit"] == 0
+
+
+class TestDeliberationRetry:
+    """run_deliberation should retry once on empty content."""
+
+    def test_retry_on_empty_content(self):
+        """First call returns empty content, second returns valid risk level."""
+        call_count = [0]
+
+        def side_effect(url, **kwargs):
+            call_count[0] += 1
+            r = mock.Mock()
+            if call_count[0] == 1:
+                r.json.return_value = {
+                    "choices": [{"message": {"content": ""}, "finish_reason": "length"}]
+                }
+            else:
+                r.json.return_value = {
+                    "choices": [{"message": {"content": "high_risk"}}]
+                }
+            r.raise_for_status = mock.Mock()
+            return r
+
+        df = pd.DataFrame([{"id": 0, "text": "test", "llama_guard_label": "safe"}])
+        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
+            result_df = run_deliberation(df)
+        assert result_df["deliberation_risk"].iloc[0] == "high_risk"
+        assert not str(result_df["deliberation_risk"].iloc[0]).startswith("error:")
+
+    def test_retry_count_is_two(self):
+        """Should make exactly two calls on retry."""
+        call_count = [0]
+
+        def side_effect(url, **kwargs):
+            call_count[0] += 1
+            r = mock.Mock()
+            if call_count[0] == 1:
+                r.json.return_value = {
+                    "choices": [{"message": {"content": ""}}]
+                }
+            else:
+                r.json.return_value = {
+                    "choices": [{"message": {"content": "concerning"}}]
+                }
+            r.raise_for_status = mock.Mock()
+            return r
+
+        df = pd.DataFrame([{"id": 0, "text": "test", "llama_guard_label": "safe"}])
+        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
+            run_deliberation(df)
+        assert call_count[0] == 2
+
+
+class TestDisableThinkingRequestBody:
+    """When DELIBERATION_DISABLE_THINKING is on, request body includes chat_template_kwargs."""
+
+    def test_chat_template_kwargs_included(self):
+        mock_response = mock.Mock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "high_risk"}}]
+        }
+        mock_response.raise_for_status = mock.Mock()
+        with mock.patch("risk_pipeline.DELIBERATION_DISABLE_THINKING", True), \
+             mock.patch("risk_pipeline.requests.post", return_value=mock_response) as mock_post:
+            call_deliberator("sample", {"guard_x": 1})
+            body = mock_post.call_args.kwargs["json"]
+            assert "chat_template_kwargs" in body
+            assert body["chat_template_kwargs"]["enable_thinking"] is False
+
+    def test_chat_template_kwargs_omitted_when_disabled(self):
+        mock_response = mock.Mock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "high_risk"}}]
+        }
+        mock_response.raise_for_status = mock.Mock()
+        with mock.patch("risk_pipeline.DELIBERATION_DISABLE_THINKING", False), \
+             mock.patch("risk_pipeline.requests.post", return_value=mock_response) as mock_post:
+            call_deliberator("sample", {"guard_x": 1})
+            body = mock_post.call_args.kwargs["json"]
+            assert "chat_template_kwargs" not in body

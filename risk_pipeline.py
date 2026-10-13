@@ -11,6 +11,7 @@ import requests
 
 from guards import (
     DELIBERATION_BASE_URL,
+    DELIBERATION_DISABLE_THINKING,
     DELIBERATION_MAX_TOKENS,
     DELIBERATION_MODEL_ID,
     DELIBERATION_PATH,
@@ -129,6 +130,8 @@ def call_deliberator(text: str, guard_scores: dict, deliberation_prompt: str | N
         "max_tokens": DELIBERATION_MAX_TOKENS,
         "messages": [{"role": "user", "content": prompt}],
     }
+    if DELIBERATION_DISABLE_THINKING:
+        body["chat_template_kwargs"] = {"enable_thinking": False}
     resp = requests.post(
         _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH), json=body, timeout=DMR_TIMEOUT
     )
@@ -160,9 +163,18 @@ def run_deliberation(df, deliberation_prompt: str | None = None):
         if failed:
             scores["_guard_models_unavailable"] = ", ".join(failed)
         try:
-            risks.append(deliberation_parse(call_deliberator(row["text"], scores, deliberation_prompt)))
+            content = call_deliberator(row["text"], scores, deliberation_prompt)
+            if not content:
+                raise ValueError("empty response content")
+            risks.append(deliberation_parse(content))
         except Exception as e:
-            risks.append(f"error: {e}")
+            try:
+                content = call_deliberator(row["text"], scores, deliberation_prompt)
+                if not content:
+                    raise ValueError("empty response content on retry")
+                risks.append(deliberation_parse(content))
+            except Exception as e2:
+                risks.append(f"error: {e2}")
     df = df.copy()
     df["deliberation_risk"] = risks
     return df

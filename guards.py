@@ -120,7 +120,7 @@ def qwen_guard_build(text: str) -> str:
 def strip_think(raw: str) -> str:
     """Remove <antThinking> blocks and unterminated trailing fragments."""
     raw = re.sub(r"<antThinking>.*?</antThinking>", "", raw, flags=re.DOTALL)
-    raw = re.sub(r"<antThinking>.*", "", raw, flags=re.DOTALL)
+    raw = re.sub(r"<antThinking>.*?\n", "", raw, flags=re.DOTALL)
     return raw.strip()
 
 _SHIELDGEMMA_YES_RE = re.compile(r"^\s*([Yy][Ee]?[Ss]|[Nn][Oo]?)")
@@ -255,7 +255,8 @@ def qwen_guard_parse(raw: str, guard_name: str = "qwen_guard") -> dict:
 DELIBERATION_MODEL_ID = "huggingface.co/qwen/qwen3-4b-gguf:Q8_0"
 DELIBERATION_BASE_URL = os.environ.get("DELIBERATION_BASE_URL", DMR_BASE_URL)
 DELIBERATION_PATH = "/v1/chat/completions"
-DELIBERATION_MAX_TOKENS = 1024
+DELIBERATION_MAX_TOKENS = int(os.environ.get("DELIBERATION_MAX_TOKENS", "2048"))
+DELIBERATION_DISABLE_THINKING = os.environ.get("DELIBERATION_DISABLE_THINKING", "1") == "1"
 
 RISK_LEVELS = ["high_risk", "concerning", "no_low_risk"]
 
@@ -271,6 +272,7 @@ def load_deliberation_prompt(path: str | None = None) -> str:
         path = str(Path(__file__).parent / "prompts" / "deliberator.txt")
     with open(path, "r") as f:
         content = f.read().rstrip("\n")
+    content = content.replace("ENTRY TEXT", "ENTRY TEXT:")
     found = set(re.findall(r"\$(?!\$)([A-Za-z_]\w*)", content))
     missing = _REQUIRED_PLACEHOLDERS - found
     if missing:
@@ -306,6 +308,8 @@ _DELIBERATION_RISK_RE = re.compile(
 
 def deliberation_parse(raw: str) -> str:
     raw = strip_think(raw)
+    if not raw:
+        raise ValueError("deliberation parse failure: empty input")
     m = _DELIBERATION_RISK_RE.search(raw)
     if not m:
         raise ValueError(f"deliberation parse failure: no risk level found in: {raw!r}")

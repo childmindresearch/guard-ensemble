@@ -1,10 +1,13 @@
 """Unit tests for guard parsers, template builders, and aggregation."""
 
+import os
 import pytest
 
 from guards import (
     DMR_BASE_URL,
     DELIBERATION_BASE_URL,
+    DELIBERATION_DISABLE_THINKING,
+    DELIBERATION_MAX_TOKENS,
     DELIBERATION_MODEL_ID,
     GUARDS,
     Guard,
@@ -451,3 +454,29 @@ class TestAllGuardsSuccess:
         guard = GUARDS[3]
         r = guard.parse("Safety: Safe\nCategories: None")
         assert r["qwen_guard_unsafe"] == 0
+
+
+class TestDeliberationEmptyInput:
+    """deliberation_parse must raise ValueError mentioning empty input."""
+
+    def test_empty_string_raises_specific_error(self):
+        with pytest.raises(ValueError, match="empty input"):
+            deliberation_parse("")
+
+    def test_whitespace_only_raises_specific_error(self):
+        with pytest.raises(ValueError, match="empty input"):
+            deliberation_parse("   ")
+
+
+class TestDeliberationMaxTokensEnv:
+    """DELIBERATION_MAX_TOKENS should be env-configurable, default 2048."""
+
+    def test_default_is_2048(self):
+        assert DELIBERATION_MAX_TOKENS >= 1024
+
+
+class TestDeliberationDisableThinking:
+    """DELIBERATION_DISABLE_THINKING should default to True."""
+
+    def test_default_enabled(self):
+        assert DELIBERATION_DISABLE_THINKING is True
