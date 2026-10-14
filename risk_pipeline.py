@@ -185,20 +185,18 @@ def run_deliberation(df, deliberation_prompt: str | None = None):
 # ---------------------------------------------------------------------------
 
 def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | None = None):
-    rows = []
-    for i, text in enumerate(texts):
-        row = {"id": i, "text": text}
-        for guard in GUARDS:
+    rows = [{"id": i, "text": t} for i, t in enumerate(texts)]
+    for guard in GUARDS:
+        for i, text in enumerate(texts):
             try:
                 raw = call_llm(guard, text)
                 if isinstance(raw, list):  # ShieldGemma
                     parsed = _shieldgemma_parse_all(raw)
-                    row.update(shieldgemma_aggregate(parsed))
+                    rows[i].update(shieldgemma_aggregate(parsed))
                 else:
-                    row.update(guard.parse(raw))
+                    rows[i].update(guard.parse(raw))
             except Exception as e:
-                row[f"{guard.name}_error"] = str(e)
-        rows.append(row)
+                rows[i][f"{guard.name}_error"] = str(e)
 
     df = pd.DataFrame(rows)
 
@@ -226,14 +224,15 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
 # ---------------------------------------------------------------------------
 
 def dry_run(texts, deliberation_prompt: str | None = None):
-    for text in texts:
-        for guard in GUARDS:
+    for guard in GUARDS:
+        for text in texts:
             prompt = guard.build(text)
             if isinstance(prompt, list):
                 for p in prompt:
                     print(f"[{guard.name}] {p}")
             else:
                 print(f"[{guard.name}] {prompt}")
+    for text in texts:
         print(f"[deliberator] {deliberation_build(text, {'_note': 'dry-run placeholder scores'}, prompt=deliberation_prompt)}")
 
 
