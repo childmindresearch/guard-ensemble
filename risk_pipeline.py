@@ -12,11 +12,13 @@ import requests
 
 from guards import (
     DELIBERATION_BASE_URL,
+    DELIBERATION_DISABLE_THINKING,
     DELIBERATION_MAX_TOKENS,
     DELIBERATION_MODEL_ID,
     DELIBERATION_PATH,
     GUARDS,
     RISK_LEVELS,
+    _shieldgemma_parse_all,
     deliberation_build,
     deliberation_parse,
     load_deliberation_prompt,
@@ -127,9 +129,11 @@ def call_deliberator(text: str, guard_scores: dict, deliberation_prompt: str | N
         "model": DELIBERATION_MODEL_ID,
         "temperature": 0,
         "max_tokens": DELIBERATION_MAX_TOKENS,
-        "messages": [{"role": "user", "content": prompt + "\n/no_think"}],
-        "chat_template_kwargs": {"enable_thinking": False},
+        "messages": [{"role": "user", "content": prompt}],
     }
+    if DELIBERATION_DISABLE_THINKING:
+        body["messages"][0]["content"] += "\n/no_think"
+        body["chat_template_kwargs"] = {"enable_thinking": False}
     resp = requests.post(
         _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH), json=body, timeout=DMR_TIMEOUT
     )
@@ -152,8 +156,8 @@ def _guard_scores_from_row(row) -> dict:
 
 
 def run_deliberation(df, deliberation_prompt: str | None = None):
-    """Add deliberation columns: one deliberator call per row."""
-    results = []
+    """Add a `deliberation_risk` column: one deliberator call per row."""
+    risks = []
     for _, row in df.iterrows():
         scores = _guard_scores_from_row(row)
         failed = [k for k in ("shieldgemma", "llama_guard", "granite_guardian", "qwen_guard")
@@ -161,11 +165,21 @@ def run_deliberation(df, deliberation_prompt: str | None = None):
         if failed:
             scores["_guard_models_unavailable"] = ", ".join(failed)
         try:
-            resp = call_deliberator(row["text"], scores, deliberation_prompt)
-            results.append(deliberation_parse(resp))
+            content = call_deliberator(row["text"], scores, deliberation_prompt)
+            if not content:
+                raise ValueError("empty response content")
+            risks.append(deliberation_parse(content))
         except Exception as e:
-            results.append({"deliberation_risk": f"error: {e}"})
-    return pd.concat([df.reset_index(drop=True), pd.DataFrame(results)], axis=1)
+            try:
+                content = call_deliberator(row["text"], scores, deliberation_prompt)
+                if not content:
+                    raise ValueError("empty response content on retry")
+                risks.append(deliberation_parse(content))
+            except Exception as e2:
+                risks.append(f"error: {e2}")
+    df = df.copy()
+    df["deliberation_risk"] = risks
+    return df
 
 # ---------------------------------------------------------------------------
 # Pipeline
@@ -192,7 +206,7 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
             try:
                 raw = call_llm(guard, row["text"])
                 if isinstance(raw, list):  # ShieldGemma
-                    parsed = [guard.parse(r) for r in raw]
+                    parsed = _shieldgemma_parse_all(raw)
                     row.update(shieldgemma_aggregate(parsed))
                 else:
                     row.update(guard.parse(raw))
@@ -208,7 +222,7 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
             lambda r: ";".join(
                 f"{col.replace('_error', '')}:{val}"
                 for col, val in r.items()
-                if val
+                if pd.notna(val) and val
             ),
             axis=1,
         )
@@ -230,14 +244,15 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
 # ---------------------------------------------------------------------------
 
 def dry_run(texts, deliberation_prompt: str | None = None):
-    for text in texts:
-        for guard in GUARDS:
+    for guard in GUARDS:
+        for text in texts:
             prompt = guard.build(text)
             if isinstance(prompt, list):
                 for p in prompt:
                     print(f"[{guard.name}] {p}")
             else:
                 print(f"[{guard.name}] {prompt}")
+    for text in texts:
         print(f"[deliberator] {deliberation_build(text, {'_note': 'dry-run placeholder scores'}, prompt=deliberation_prompt)}")
 
 

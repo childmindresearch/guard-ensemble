@@ -41,6 +41,8 @@ All four guards plus the deliberator are pulled as GGUF models. Model names are
 | `GRANITE_GUARDIAN_BASE_URL` | `$DMR_BASE_URL` | Override Granite Guardian endpoint (vLLM migration) |
 | `QWEN_GUARD_BASE_URL` | `$DMR_BASE_URL` | Override Qwen3Guard endpoint (vLLM migration) |
 | `DELIBERATION_BASE_URL` | `$DMR_BASE_URL` | Override Deliberator endpoint (vLLM migration) |
+| `DELIBERATION_MAX_TOKENS` | `2048` | Max tokens for deliberator responses |
+| `DELIBERATION_DISABLE_THINKING` | `1` | Disable thinking mode for deliberator (set to `0` to enable) |
 
 Per-guard `*_BASE_URL` overrides let you route individual models to separate
 inference servers while leaving the rest on DMR.

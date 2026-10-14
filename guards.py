@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -119,9 +118,9 @@ def qwen_guard_build(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def strip_think(raw: str) -> str:
-    """Remove <think> blocks and unterminated trailing fragments."""
-    raw = re.sub(r"<think>.*?", "", raw, flags=re.DOTALL)
-    raw = re.sub(r"<think>.*", "", raw, flags=re.DOTALL)
+    """Remove <antThinking> blocks and unterminated trailing fragments."""
+    raw = re.sub(r"<antThinking>.*?</antThinking>", "", raw, flags=re.DOTALL)
+    raw = re.sub(r"<antThinking>.*?\n", "", raw, flags=re.DOTALL)
     return raw.strip()
 
 _SHIELDGEMMA_YES_RE = re.compile(r"^\s*([Yy][Ee]?[Ss]|[Nn][Oo]?)")
@@ -256,7 +255,8 @@ def qwen_guard_parse(raw: str, guard_name: str = "qwen_guard") -> dict:
 DELIBERATION_MODEL_ID = "huggingface.co/qwen/qwen3-4b-gguf:Q8_0"
 DELIBERATION_BASE_URL = os.environ.get("DELIBERATION_BASE_URL", DMR_BASE_URL)
 DELIBERATION_PATH = "/v1/chat/completions"
-DELIBERATION_MAX_TOKENS = 1024
+DELIBERATION_MAX_TOKENS = int(os.environ.get("DELIBERATION_MAX_TOKENS", "2048"))
+DELIBERATION_DISABLE_THINKING = os.environ.get("DELIBERATION_DISABLE_THINKING", "1") == "1"
 
 RISK_LEVELS = ["high_risk", "concerning", "no_low_risk"]
 
@@ -272,6 +272,7 @@ def load_deliberation_prompt(path: str | None = None) -> str:
         path = str(Path(__file__).parent / "prompts" / "deliberator.txt")
     with open(path, "r") as f:
         content = f.read().rstrip("\n")
+    content = content.replace("ENTRY TEXT", "ENTRY TEXT:")
     found = set(re.findall(r"\$(?!\$)([A-Za-z_]\w*)", content))
     missing = _REQUIRED_PLACEHOLDERS - found
     if missing:
@@ -299,29 +300,26 @@ def deliberation_build(text: str, guard_scores: dict, prompt: str | None = None)
     return Template(prompt).substitute(text=text, scores_block=scores_block)
 
 
-_RISK_MAP = {"concerning": "concerning", "no risk": "no_low_risk"}
+_DELIBERATION_RISK_RE = re.compile(
+    r"\b(high[_\s-]?risk|concerning|no[_\s-]?low[_\s-]?risk|no[_\s-]?risk|low[_\s-]?risk|safe)\b",
+    re.IGNORECASE,
+)
 
 
-def deliberation_parse(raw: str) -> dict:
+def deliberation_parse(raw: str) -> str:
     raw = strip_think(raw)
-    start, end = raw.find("{"), raw.rfind("}")
-    if start == -1 or end <= start:
-        raise ValueError(f"deliberation parse failure: no JSON object in: {raw!r}")
-    try:
-        data = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError as e:
-        raise ValueError(f"deliberation parse failure: invalid JSON ({e}) in: {raw!r}") from e
+    if not raw:
+        raise ValueError("deliberation parse failure: empty input")
+    m = _DELIBERATION_RISK_RE.search(raw)
+    if not m:
+        raise ValueError(f"deliberation parse failure: no risk level found in: {raw!r}")
+    token = m.group(1).lower().replace(" ", "_").replace("-", "_")
+    if token.startswith("high"):
+        return "high_risk"
+    if token == "concerning":
+        return "concerning"
+    return "no_low_risk"
 
-    label = str(data.get("overall_classification", "")).strip().lower().replace("_", " ")
-    if label not in _RISK_MAP:
-        raise ValueError(f"deliberation parse failure: unknown classification {label!r}")
-
-    return {
-        "deliberation_risk": _RISK_MAP[label],
-        "deliberation_tags": ";".join(data.get("tags") or []),
-        "deliberation_refer_self_harm": data.get("refer_self_harm") is True,
-        "deliberation_explanation": data.get("brief_explanation", ""),
-    }
 
 # ---------------------------------------------------------------------------
 # Guard dataclass

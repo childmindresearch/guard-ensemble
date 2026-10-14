@@ -87,7 +87,7 @@ async def score_text(text: str) -> dict:
     try:
         raw = await chat("deliberator", deliberation_build(text, scores), DELIBERATOR_MAX_TOKENS,
                  chat_template_kwargs={"enable_thinking": False})
-        row.update(deliberation_parse(raw))
+        row["deliberation_risk"] = deliberation_parse(raw)
     except Exception as e:  # noqa: BLE001 - keep the row, surface the failure
         row["deliberation_risk"] = f"error: {type(e).__name__}: {e}"
     return row
