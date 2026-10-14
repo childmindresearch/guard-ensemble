@@ -18,9 +18,6 @@ This document presents findings from exploring hosting options on AWS and
 outlines the implications different approaches have for the resulting code
 implementation.
 
-> **Note:** The prices displayed in this document are LLM-assisted estimates
-and may not reflect true operating costs.
-
 ## Initial findings
 
 The first attempt at running the risk-detection pipeline employed a
@@ -120,9 +117,10 @@ incoming single requests.
 
 ### Smaller models
 
-Each guard family publishes small variants: Llama Guard 3 1B, Granite Guardian
-3.3 2B and Qwen3Guard-Gen 4B. With these, the whole ensemble fits on one 24 GB
-card, which reduces the cost associated with hosting a service by a fair amount.
+Each guard family publishes small variants: ShieldGemma 2B, Llama Guard 3 1B,
+Granite Guardian 3.3 2B and Qwen3Guard-Gen 4B. With these, the whole ensemble
+fits on one 24 GB card, which reduces the cost associated with hosting a service
+by a fair amount since `g6.xlarge` instances become an option.
 
 ### Bedrock
 
@@ -145,4 +143,5 @@ Below are costs associated with EC2 instance types.
 | Instance | GPU | VRAM | $/hr | 24/7 month |
 | --- | --- | --- | --- | --- |
 | g4dn.xlarge | T4 | 16 GB | 0.53 | ~384 |
+| g6.xlarge | L4 | 24 GB | 0.81 | ~588 |
 | g6e.xlarge | L40S | 48 GB | 1.86 | ~1,359 |
