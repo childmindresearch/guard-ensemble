@@ -1,0 +1,26 @@
+[project]
+name = "guard-ensemble"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.1",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+pipeline = [
+    "pandas>=3.0.6",
+    "requests>=2.34.2",
+]
+dev = [
+    { include-group = "pipeline" },
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

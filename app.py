@@ -1,11 +1,13 @@
-"""Thin orchestrator: fans texts out to vLLM model servers, runs the deliberator.
+"""
+! NOTE: This is a demo application scaffolded by an LLM. It is *not* meant for
+! production use, rather as a starter template for a potential risk-detection
+! service hosted on AWS. Do not deploy!
+
+Thin orchestrator: fans texts out to vLLM model servers, runs the deliberator.
 
 No GPU code lives here. Inference happens in the vLLM containers; this service
 only builds prompts, calls them concurrently (bounded by MAX_INFLIGHT), parses
 results and manages batch jobs.
-
-Wire in your existing guards.py: GUARDS (name, build, parse), deliberation_build,
-deliberation_parse, shieldgemma_aggregate.
 """
 
 from __future__ import annotations
@@ -30,21 +32,15 @@ DELIBERATOR_MAX_TOKENS = 256
 
 app = FastAPI(title="risk-detection")
 client = httpx.AsyncClient(timeout=120)
-sem = asyncio.Semaphore(MAX_INFLIGHT)       # caps concurrent model calls across ALL requests
-jobs: dict[str, dict] = {}                  # in-memory; move to SQS + S3 before relying on it
+sem = asyncio.Semaphore(MAX_INFLIGHT)
+
+# demo: jobs are stored in memory - move to SQS / S3 for production use
+jobs: dict[str, dict] = {}
 
 
 # ---------------------------------------------------------------------------
 # Model calls
 # ---------------------------------------------------------------------------
-
-async def complete(model: str, prompt: str, max_tokens: int) -> str:
-    """One completion against the vLLM server for `model`."""
-    body = {"model": model, "prompt": prompt, "temperature": 0, "max_tokens": max_tokens}
-    async with sem:
-        resp = await client.post(f"{MODEL_URLS[model]}/completions", json=body)
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["text"]
 
 
 async def chat(model: str, prompt: str, max_tokens: int, **extra) -> str:
@@ -63,14 +59,16 @@ async def chat(model: str, prompt: str, max_tokens: int, **extra) -> str:
 
 async def run_guard(guard, text: str) -> dict:
     prompt = guard.build(text)
-    call = chat if guard.path == "/v1/chat/completions" else complete
-    raw = await call(guard.name, prompt, GUARD_MAX_TOKENS)
+    raw = await chat(guard.name, prompt, GUARD_MAX_TOKENS)
     return guard.parse(raw)
+
 
 async def score_text(text: str) -> dict:
     """All configured guards concurrently, then the deliberator."""
     active = [g for g in GUARDS if g.name in MODEL_URLS]
-    results = await asyncio.gather(*(run_guard(g, text) for g in active), return_exceptions=True)
+    results = await asyncio.gather(
+        *(run_guard(g, text) for g in active), return_exceptions=True
+    )
 
     row: dict = {"text": text}
     unavailable = []
@@ -85,10 +83,14 @@ async def score_text(text: str) -> dict:
     if unavailable:
         scores["_guard_models_unavailable"] = ", ".join(unavailable)
     try:
-        raw = await chat("deliberator", deliberation_build(text, scores), DELIBERATOR_MAX_TOKENS,
-                 chat_template_kwargs={"enable_thinking": False})
+        raw = await chat(
+            "deliberator",
+            deliberation_build(text, scores),
+            DELIBERATOR_MAX_TOKENS,
+            chat_template_kwargs={"enable_thinking": False},
+        )
         row["deliberation_risk"] = deliberation_parse(raw)
-    except Exception as e:  # noqa: BLE001 - keep the row, surface the failure
+    except Exception as e:  # noqa: BLE001
         row["deliberation_risk"] = f"error: {type(e).__name__}: {e}"
     return row
 
@@ -97,12 +99,13 @@ async def score_text(text: str) -> dict:
 # API
 # ---------------------------------------------------------------------------
 
+
 class DetectRequest(BaseModel):
     text: str
 
 
 class BatchRequest(BaseModel):
-    csv_url: str                # pre-signed or public URL; swap for bucket/key once in AWS
+    csv_url: str  # pre-signed or public URL; swap for bucket/key once in AWS
     text_col: str = "text"
 
 
@@ -155,7 +158,6 @@ async def run_batch(job_id: str, req: BatchRequest) -> None:
             job["done"] += 1
             return {"id": i, **row}
 
-        # Rows run concurrently; the semaphore in complete()/chat() keeps the servers from flooding.
         job["rows"] = await asyncio.gather(*(one(i, t) for i, t in enumerate(texts)))
         job["status"] = "done"
     except Exception as e:  # noqa: BLE001

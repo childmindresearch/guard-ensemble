@@ -64,7 +64,7 @@ Qwen3Guard, and the Deliberator are Apache-2.0 and ungated.
 
 ```bash
 bash serve.sh # probe DMR, pull models, smoke-test
-python risk_pipeline.py --input texts.csv --output scores.csv
+uv run risk_pipeline.py --input texts.csv --output scores.csv
 ```
 
 To unload the models:
@@ -103,7 +103,7 @@ The file must contain the three risk level definitions (`high_risk`, `concerning
 **Example**:
 
 ```bash
-python risk_pipeline.py --input texts.csv --deliberation-prompt my_prompt.txt
+uv run risk_pipeline.py --input texts.csv --deliberation-prompt my_prompt.txt
 ```
 
 ## Column dictionary
