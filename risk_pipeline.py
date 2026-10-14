@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 
 import pandas as pd
 import requests
@@ -126,7 +127,8 @@ def call_deliberator(text: str, guard_scores: dict, deliberation_prompt: str | N
         "model": DELIBERATION_MODEL_ID,
         "temperature": 0,
         "max_tokens": DELIBERATION_MAX_TOKENS,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": prompt + "\n/no_think"}],
+        "chat_template_kwargs": {"enable_thinking": False},
     }
     resp = requests.post(
         _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH), json=body, timeout=DMR_TIMEOUT
@@ -150,8 +152,8 @@ def _guard_scores_from_row(row) -> dict:
 
 
 def run_deliberation(df, deliberation_prompt: str | None = None):
-    """Add a `deliberation_risk` column: one deliberator call per row."""
-    risks = []
+    """Add deliberation columns: one deliberator call per row."""
+    results = []
     for _, row in df.iterrows():
         scores = _guard_scores_from_row(row)
         failed = [k for k in ("shieldgemma", "llama_guard", "granite_guardian", "qwen_guard")
@@ -159,25 +161,36 @@ def run_deliberation(df, deliberation_prompt: str | None = None):
         if failed:
             scores["_guard_models_unavailable"] = ", ".join(failed)
         try:
-            risks.append(deliberation_parse(call_deliberator(row["text"], scores, deliberation_prompt)))
+            resp = call_deliberator(row["text"], scores, deliberation_prompt)
+            results.append(deliberation_parse(resp))
         except Exception as e:
-            risks.append(f"error: {e}")
-    df = df.copy()
-    df["deliberation_risk"] = risks
-    return df
-
+            results.append({"deliberation_risk": f"error: {e}"})
+    return pd.concat([df.reset_index(drop=True), pd.DataFrame(results)], axis=1)
 
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 
+CONTEXT_SIZE = int(os.environ.get("DMR_CONTEXT_SIZE", "8192"))
+
+
+def _prepare(model_id: str) -> None:
+    """Clear the GPU, then set this model's context size (unloading resets it)."""
+    subprocess.run(["docker", "model", "unload", "--all"], check=False, capture_output=True)
+    subprocess.run(
+        ["docker", "model", "configure", "--context-size", str(CONTEXT_SIZE), model_id],
+        check=True, capture_output=True,
+    )
+    print(f"Unloaded models and configured {model_id}")
+
 def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | None = None):
-    rows = []
-    for i, text in enumerate(texts):
-        row = {"id": i, "text": text}
-        for guard in GUARDS:
+    rows = [{"id": i, "text": text} for i, text in enumerate(texts)]
+
+    for guard in GUARDS:
+        _prepare(guard.model_id)
+        for row in rows:
             try:
-                raw = call_llm(guard, text)
+                raw = call_llm(guard, row["text"])
                 if isinstance(raw, list):  # ShieldGemma
                     parsed = [guard.parse(r) for r in raw]
                     row.update(shieldgemma_aggregate(parsed))
@@ -185,7 +198,6 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
                     row.update(guard.parse(raw))
             except Exception as e:
                 row[f"{guard.name}_error"] = str(e)
-        rows.append(row)
 
     df = pd.DataFrame(rows)
 
@@ -202,9 +214,14 @@ def run(texts, output_path, skip_deliberation=False, deliberation_prompt: str | 
         )
 
     if not skip_deliberation:
+        _prepare(DELIBERATION_MODEL_ID)
         df = run_deliberation(df, deliberation_prompt)
 
-    df.to_csv(output_path, index=False)
+    if output_path.endswith(".json"):
+        df.to_json(output_path, "records")
+    else:
+        df.to_csv(output_path, index=False)
+
     return df
 
 

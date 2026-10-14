@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -298,24 +299,29 @@ def deliberation_build(text: str, guard_scores: dict, prompt: str | None = None)
     return Template(prompt).substitute(text=text, scores_block=scores_block)
 
 
-_DELIBERATION_RISK_RE = re.compile(
-    r"\b(high[_\s-]?risk|concerning|no[_\s-]?low[_\s-]?risk|no[_\s-]?risk|low[_\s-]?risk|safe)\b",
-    re.IGNORECASE,
-)
+_RISK_MAP = {"concerning": "concerning", "no risk": "no_low_risk"}
 
 
-def deliberation_parse(raw: str) -> str:
+def deliberation_parse(raw: str) -> dict:
     raw = strip_think(raw)
-    m = _DELIBERATION_RISK_RE.search(raw)
-    if not m:
-        raise ValueError(f"deliberation parse failure: no risk level found in: {raw!r}")
-    token = m.group(1).lower().replace(" ", "_").replace("-", "_")
-    if token.startswith("high"):
-        return "high_risk"
-    if token == "concerning":
-        return "concerning"
-    return "no_low_risk"
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError(f"deliberation parse failure: no JSON object in: {raw!r}")
+    try:
+        data = json.loads(raw[start : end + 1])
+    except json.JSONDecodeError as e:
+        raise ValueError(f"deliberation parse failure: invalid JSON ({e}) in: {raw!r}") from e
 
+    label = str(data.get("overall_classification", "")).strip().lower().replace("_", " ")
+    if label not in _RISK_MAP:
+        raise ValueError(f"deliberation parse failure: unknown classification {label!r}")
+
+    return {
+        "deliberation_risk": _RISK_MAP[label],
+        "deliberation_tags": ";".join(data.get("tags") or []),
+        "deliberation_refer_self_harm": data.get("refer_self_harm") is True,
+        "deliberation_explanation": data.get("brief_explanation", ""),
+    }
 
 # ---------------------------------------------------------------------------
 # Guard dataclass
@@ -337,15 +343,15 @@ class Guard:
 # ---------------------------------------------------------------------------
 
 GUARDS: list[Guard] = [
-    Guard(
-        name="shieldgemma",
-        model_id="huggingface.co/quantfactory/shieldgemma-9b-gguf:Q8_0",
-        base_url=os.environ.get("SHIELDGEMMA_BASE_URL", DMR_BASE_URL),
-        path="/v1/completions",
-        max_tokens=5,
-        build=_shieldgemma_build_all,
-        parse=lambda raw: shieldgemma_parse(raw, policy_name="dangerous_content"),
-    ),
+    # Guard(
+    #     name="shieldgemma",
+    #     model_id="huggingface.co/quantfactory/shieldgemma-9b-gguf:Q8_0",
+    #     base_url=os.environ.get("SHIELDGEMMA_BASE_URL", DMR_BASE_URL),
+    #     path="/v1/completions",
+    #     max_tokens=5,
+    #     build=_shieldgemma_build_all,
+    #     parse=lambda raw: shieldgemma_parse(raw, policy_name="dangerous_content"),
+    # ),
     Guard(
         name="llama_guard",
         model_id="huggingface.co/quantfactory/llama-guard-3-8b-gguf:Q8_0",
@@ -366,7 +372,7 @@ GUARDS: list[Guard] = [
     ),
     Guard(
         name="qwen_guard",
-        model_id="huggingface.co/geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q4_K_M",
+        model_id="qwen3guard-gen-8b:Q8_0",
         base_url=os.environ.get("QWEN_GUARD_BASE_URL", DMR_BASE_URL),
         path="/v1/chat/completions",
         max_tokens=64,

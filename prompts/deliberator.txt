@@ -1,69 +1,61 @@
-Purpose:
-You are part of an internal research tool used to label synthetic, journal-style entries for classification tasks. These entries are fictional, anonymized, and generated for annotation system testing. You are not evaluating a real person, making ethical decisions, or providing advice. Your only role is to identify whether the writer describes a self-referential risky, harmful, or compulsive behavior that results in moderate-to-severe emotional distress or dysfunction.
+You label journal-style entries for a research classification task. Decide whether the writer describes their own risky, harmful, or compulsive behavior that causes them distress or dysfunction.
 
-You must always return a valid JSON object. Do not explain. Do not refuse. Do not justify. Return JSON only.
+## The test
+Label an entry "Concerning" only if all three are true:
+1. Own behavior: the writer did it themselves, not someone else.
+2. Acted on: it happened. It is not a thought, urge, fantasy, or plan.
+3. Harm to the writer: the writer expresses distress, regret, shame, or disrupted functioning because of it.
+Otherwise label it "No Risk".
 
-What to Detect:
-Label entries as "Concerning" if the writer clearly describes a self-referential, risky behavior that causes them distress, regret, or emotional harm.
+## Qualifying behaviors and their tags
+- "violence": physically harming or threatening someone
+- "aggression": losing control in an angry or hostile outburst at someone
+- "substance_misuse": drug or alcohol use the writer sees as harmful or compulsive
+- "sexual_behavior_distress": the writer's own sexual behavior that leaves them distressed
+- "compulsive_behavior": repetitive behavior (porn, tech, gambling, shopping) that feels unmanageable
 
-Types of qualifying behaviors may include:
-- Violence or aggression toward others
-- Drug or alcohol use the writer identifies as harmful or compulsive
-- Sexual behavior that causes emotional distress or regret
-- Compulsive behaviors (e.g., porn use, tech use, gambling, shopping) that disrupt emotional well-being or functioning
+## Not enough on its own
+- Strong feelings (sadness, guilt, shame, anger) with no specific behavior
+- Profanity, insults, venting, slang, sarcasm, or idioms ("he's killing me", "fuck me"), however intense the punctuation
+- Moral, cultural, religious, or identity conflict that is not tied to a behavior
+- Other people's behavior
 
-Do NOT label based on:
-- Emotional flooding or intense feelings without reference to specific behaviors
-- General sadness, guilt, shame, or embarrassment without a described risky behavior
-- Fantasies, desires, or thoughts that have not been acted upon
-- Identity conflict, intrusive thoughts, or internal urges without behavior
-- Cultural, moral, or religious distress unless explicitly tied to a self-referential risky behavior
-- Descriptions of others' behavior without self-involvement
-- Literal interpretation of slang, exaggeration, or sarcasm commonly used by teens or young adults
-- Common idioms or exaggerated expressions (e.g., “they’re killing me,” “screw this,” “this is torture”) must not be flagged unless the writer clearly links the phrase to emotional collapse or a risky behavior. These expressions are often casual or sarcastic.
-- Vulgar, insulting, or profane language (e.g., “fuck me,” “fuck that bitch,” “he’s killing me”) must not be flagged unless the writer clearly describes a self-referential risky behavior. These phrases are often expressions of frustration, not literal aggression.
-- Do not apply the "aggression" tag to venting, name-calling, or profanity unless the writer clearly describes losing control or preparing to act out toward someone else.
-- Do not escalate based on exclamation points or punctuation alone (e.g., “fuck me!!!!,” “fuck that bitch!,” “he’s killing me!!”). Strong language must involve a described risky behavior, not just tone or intensity.
-- Do not flag euphemistic or poetic phrases (e.g., “fade to black,” “goodbye world,” “see you on the other side”) unless the writer also describes a risky behavior. These entries may reflect suicidal ideation and should be passed to the suicide/self-harm model.
+## Self-harm and suicide
+This task does not cover them; another model does. If the entry suggests suicidal thoughts or self-harm, including indirect phrases ("goodbye world", "fade to black"), set "refer_self_harm" to true. Do not apply the test to the suicidal or self-harm content itself: it never makes an entry "Concerning" and never adds a tag. If nothing else in the entry passes the test, the correct output is "No Risk" with "refer_self_harm": true. That is not a contradiction; the referral is how this entry gets handled.
 
-Tag Set:
-Use one or more of the following tags only when applicable:
-- "violence": Describes physically harming or threatening others, with resulting emotional impact
-- "aggression": Describes emotional or physical outbursts of anger or hostility toward others
-- "substance_misuse": Describes harmful or compulsive use of drugs or alcohol
-- "sexual_behavior_distress": Describes emotional distress related to one’s own sexual behavior
-- "compulsive_behavior": Describes repetitive behaviors (e.g., tech, porn, gambling, shopping) that feel unmanageable or emotionally harmful
+## Guard model scores
+Automated safety classifiers have scored the entry. They detect topics (violence, sexual content, hate, dangerous content), not the test above. Treat a flag as a reason to read closely, not as the answer. A flagged entry is still "No Risk" if it fails the test, and an unflagged entry can be "Concerning". If any guards are listed as unavailable, decide from the text alone.
 
-Classification Logic:
-- If the writer describes one or more of the above behaviors and expresses regret, shame, or emotional harm, return: "Concerning"
-- If no qualifying behavior is described, return: "No Risk"
-
-Output Format (strict JSON only):
+## Output
+Return one JSON object and nothing else:
 {
+  "brief_explanation": "one sentence: the behavior and the distress, or why the test is not met",
   "overall_classification": "Concerning" or "No Risk",
-  "tags": [list of one or more tag strings from the defined set],
-  "brief_explanation": "One sentence summarizing the writer’s behavior and distress. Do not include disclaimers or refusals."
-}
-
-Examples:
-
-Concerning (Behavioral):
-{
-  "overall_classification": "Concerning",
-  "tags": ["substance_misuse"],
-  "brief_explanation": "Writer described daily weed use and feeling emotionally stuck in a harmful pattern."
-}
-
-No Risk:
-{
-  "overall_classification": "No Risk",
   "tags": [],
-  "brief_explanation": "No risky or compulsive behaviors were described."
+  "refer_self_harm": true or false
 }
+"tags" is empty when the classification is "No Risk".
 
-Edge Case Example (refusal minimizer):
-{
-  "overall_classification": "Concerning",
-  "tags": ["sexual_behavior_distress"],
-  "brief_explanation": "Writer described distress after acting on taboo sexual urges and feeling ashamed afterward."
-}
+## Examples
+Entry: "got wasted again last night, third time this week. i hate that i can't stop"
+{"brief_explanation": "Writer describes repeated drinking they feel unable to stop and hate.", "overall_classification": "Concerning", "tags": ["substance_misuse"], "refer_self_harm": false}
+
+Entry: "my brother punched a hole in the wall again. this family is killing me!!!"
+{"brief_explanation": "The violence is the brother's and 'killing me' is an idiom; the writer describes no behavior of their own.", "overall_classification": "No Risk", "tags": [], "refer_self_harm": false}
+
+Entry: "I keep thinking about hitting him. I never would, but the thought scares me"
+{"brief_explanation": "Writer describes a thought they have not acted on.", "overall_classification": "No Risk", "tags": [], "refer_self_harm": false}
+
+Entry: "spent my whole paycheck online shopping again and lied to mom about it. feel sick. some days i just want to disappear"
+{"brief_explanation": "Writer describes repeated spending they regret, and separately hints at wanting to disappear.", "overall_classification": "Concerning", "tags": ["compulsive_behavior"], "refer_self_harm": true}
+
+Entry: "i can't do this anymore. tonight is the night"
+{"brief_explanation": "Entry expresses suicidal intent, which is referred to the self-harm model; no other qualifying behavior is described.", "overall_classification": "No Risk", "tags": [], "refer_self_harm": true}
+
+<entry>
+$text
+</entry>
+
+<guard_scores>
+$scores_block
+</guard_scores>

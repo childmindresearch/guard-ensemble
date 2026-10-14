@@ -1,0 +1,92 @@
+# One vLLM server per model (FP8 at load time), plus the orchestrator. Sized for one L40S (48 GB).
+# gpu-memory-utilization is each process's share of the WHOLE card (weights + KV cache);
+# the shares must sum to < 1.0. Weights at FP8: ~9.5 GB per 8-9B guard, ~4.3 GB for the 4B.
+
+x-vllm: &vllm
+  image: vllm/vllm-openai:latest
+  restart: unless-stopped
+  ipc: host
+  volumes:
+    - hf-cache:/root/.cache/huggingface
+  environment:
+    HF_TOKEN: ${HF_TOKEN}
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  healthcheck:
+    test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+    interval: 15s
+    timeout: 5s
+    retries: 60
+    start_period: 600s      # first start downloads + quantizes; later starts are faster
+
+services:
+  # shieldgemma:
+  #   <<: *vllm
+  #   command: >
+  #     --model google/shieldgemma-9b --served-model-name shieldgemma
+  #     --quantization fp8_per_tensor --max-model-len 8192 --gpu-memory-utilization 0.28
+  #     --enforce-eager --max-num-seqs 16
+  #   ports: ["8001:8000"]
+
+  llama_guard:
+    <<: *vllm
+    command: >
+      --model meta-llama/Llama-Guard-3-8B --served-model-name llama_guard
+      --quantization fp8_per_tensor --max-model-len 8192 --gpu-memory-utilization 0.25
+      --enforce-eager --max-num-seqs 16
+    ports: ["8002:8000"]
+    # depends_on:
+    #   shieldgemma: {condition: service_healthy}
+
+  granite_guardian:
+    <<: *vllm
+    command: >
+      --model ibm-granite/granite-guardian-3.3-8b --served-model-name granite_guardian
+      --quantization fp8_per_tensor --max-model-len 8192 --gpu-memory-utilization 0.25
+      --enforce-eager --max-num-seqs 16
+    ports: ["8003:8000"]
+    depends_on:
+      llama_guard: {condition: service_healthy}
+
+  qwen_guard:
+    <<: *vllm
+    command: >
+      --model Qwen/Qwen3Guard-Gen-8B --served-model-name qwen_guard
+      --quantization fp8_per_tensor --max-model-len 8192 --gpu-memory-utilization 0.25
+      --enforce-eager --max-num-seqs 16
+    ports: ["8004:8000"]
+    depends_on:
+      granite_guardian: {condition: service_healthy}
+
+  deliberator:
+    <<: *vllm
+    command: >
+      --model Qwen/Qwen3-4B --served-model-name deliberator
+      --quantization fp8_per_tensor --max-model-len 8192 --gpu-memory-utilization 0.15
+      --enforce-eager --max-num-seqs 16
+    ports: ["8005:8000"]
+    depends_on:
+      qwen_guard: {condition: service_healthy}
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    environment:
+      MODEL_URLS: >
+        {"shieldgemma": "http://shieldgemma:8000/v1",
+         "llama_guard": "http://llama_guard:8000/v1",
+         "granite_guardian": "http://granite_guardian:8000/v1",
+         "qwen_guard": "http://qwen_guard:8000/v1",
+         "deliberator": "http://deliberator:8000/v1"}
+      MAX_INFLIGHT: "4"
+    depends_on:
+      deliberator: {condition: service_healthy}
+
+volumes:
+  hf-cache:

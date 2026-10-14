@@ -16,7 +16,7 @@ MODELS=(
     "huggingface.co/quantfactory/shieldgemma-9b-gguf:Q8_0"
     "huggingface.co/quantfactory/llama-guard-3-8b-gguf:Q8_0"
     "huggingface.co/ibm-granite/granite-guardian-3.3-8b-gguf:Q8_0"
-    "huggingface.co/geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q4_K_M"
+    "huggingface.co/geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q8_0"
     "huggingface.co/qwen/qwen3-4b-gguf:Q8_0"
 )
 
@@ -44,7 +44,7 @@ echo "Pulling ${#MODELS[@]} models …"
 PULL_FAILURES=()
 for model in "${MODELS[@]}"; do
     echo "  pulling  ${model} …"
-    if ! docker model pull "$model" >/dev/null 2>&1; then
+    if ! docker model pull "$model"; then
         PULL_FAILURES+=("$model")
     fi
 done

@@ -1,24 +1,29 @@
 # MSM Risk Detection Pipeline
 
-Two-stage risk pipeline: guard fan-out across four models, then a deliberation call per row, with results emitted as CSV.
+Two-stage risk pipeline: guard fan-out across four models, then a deliberation
+call per row, with results emitted as CSV.
 
 ## Architecture
 
 Two stages per input row:
 
-1. **Guard fan-out** — four guard models are called (serial HTTP calls to a single Docker Model Runner instance). Each model parses its response independently.
-2. **Deliberation** — a general-purpose LLM (the deliberator) is called once per row, receiving the four guard verdicts and producing a final risk assessment.
+1. **Guard fan-out** — four guard models are called (serial HTTP calls to a single
+Docker Model Runner instance). Each model parses its response independently.
+2. **Deliberation** — a general-purpose LLM (the deliberator) is called once per
+row, receiving the four guard verdicts and producing a final risk assessment.
 
 Results are written as a single CSV row per input text.
 
-DMR hosts one resident model at a time. Each guard or deliberation call triggers a model reload, which adds latency but keeps peak VRAM low.
+DMR hosts one resident model at a time. Each guard or deliberation call triggers
+a model reload, which adds latency but keeps peak VRAM low.
 
 ## Models
 
-All four guards plus the deliberator are pulled as GGUF models. Model names are **case-sensitive lowercase** — use the exact strings reported by `docker model list`.
+All four guards plus the deliberator are pulled as GGUF models. Model names are
+**case-sensitive lowercase** — use the exact strings reported by `docker model list`.
 
 | Role | Model (`docker model list` name) | Quantization | Size | License |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ShieldGemma | `huggingface.co/quantfactory/shieldgemma-9b-gguf:Q8_0` | Q8_0 | 9 B | Gemma |
 | Llama Guard 3 | `huggingface.co/quantfactory/llama-guard-3-8b-gguf:Q8_0` | Q8_0 | 8 B | llama3.1 |
 | Granite Guardian | `huggingface.co/ibm-granite/granite-guardian-3.3-8b-gguf:Q8_0` | Q8_0 | 8 B | Apache-2.0 |
@@ -28,7 +33,7 @@ All four guards plus the deliberator are pulled as GGUF models. Model names are 
 ## Environment variables
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `DMR_BASE_URL` | `http://localhost:12434/engines/v1` | Base URL for the DMR engine API |
 | `DMR_TIMEOUT` | `600` | Request timeout in seconds |
 | `SHIELDGEMMA_BASE_URL` | `$DMR_BASE_URL` | Override ShieldGemma endpoint (vLLM migration) |
@@ -37,22 +42,26 @@ All four guards plus the deliberator are pulled as GGUF models. Model names are 
 | `QWEN_GUARD_BASE_URL` | `$DMR_BASE_URL` | Override Qwen3Guard endpoint (vLLM migration) |
 | `DELIBERATION_BASE_URL` | `$DMR_BASE_URL` | Override Deliberator endpoint (vLLM migration) |
 
-Per-guard `*_BASE_URL` overrides let you route individual models to separate inference servers while leaving the rest on DMR.
+Per-guard `*_BASE_URL` overrides let you route individual models to separate
+inference servers while leaving the rest on DMR.
 
 ## Prerequisites
 
 - Python 3.10+
 - `pip install -r requirements.txt`
-- GPU with at least ~10 GiB VRAM (DMR loads one model at a time; peak VRAM stays ~10 GiB)
+- GPU with at least ~10 GiB VRAM (DMR loads one model at a time; peak VRAM stays
+~10 GiB)
 
 ## Gated models
 
-Llama Guard 3 8B (llama3.1 license) and ShieldGemma 9B (Gemma license) require an `HF_TOKEN` and prior license acceptance on Hugging Face. Granite Guardian, Qwen3Guard, and the Deliberator are Apache-2.0 and ungated.
+Llama Guard 3 8B (llama3.1 license) and ShieldGemma 9B (Gemma license) require
+an `HF_TOKEN` and prior license acceptance on Hugging Face. Granite Guardian,
+Qwen3Guard, and the Deliberator are Apache-2.0 and ungated.
 
 ## Run
 
 ```bash
-bash serve.sh                    # probe DMR, pull models, smoke-test
+bash serve.sh # probe DMR, pull models, smoke-test
 python risk_pipeline.py --input texts.csv --output scores.csv
 ```
 
@@ -65,7 +74,7 @@ bash serve.sh --kill
 ## CLI flags
 
 | Flag | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `--input` | *(none)* | Path to input CSV |
 | `--text-col` | `text` | Column name containing the text to score |
 | `--output` | `scores.csv` | Path to output CSV |
@@ -76,16 +85,18 @@ bash serve.sh --kill
 
 ## Deliberator prompt
 
-The deliberator prompt is loaded from `prompts/deliberator.txt` by default. Override with `--deliberation-prompt path/to/custom.txt`.
+The deliberator prompt is loaded from `prompts/deliberator.txt` by default.
+Override with `--deliberation-prompt path/to/custom.txt`.
 
 The prompt file is a `string.Template` with two placeholders:
 
 | Placeholder | Substituted with |
-|---|---|
+| --- | --- |
 | `$text` | The original input text |
 | `$scores_block` | Guard model ratings (bullet list, or "none available" if all guards failed) |
 
-The file must contain the three risk level definitions (`high_risk`, `concerning`, `no_low_risk`) or the parser will reject the deliberator's output.
+The file must contain the three risk level definitions (`high_risk`, `concerning`,
+`no_low_risk`) or the parser will reject the deliberator's output.
 
 **Example**:
 
@@ -96,7 +107,7 @@ python risk_pipeline.py --input texts.csv --deliberation-prompt my_prompt.txt
 ## Column dictionary
 
 | Column | Description |
-|---|---|
+| --- | --- |
 | `id` | Zero-based index of the input text |
 | `text` | The original input text |
 | `shieldgemma_unsafe` | 1 if any ShieldGemma policy flagged the text, else 0 |
@@ -121,7 +132,9 @@ python risk_pipeline.py --input texts.csv --deliberation-prompt my_prompt.txt
 
 ## vLLM migration
 
-For production Linux deployments, replace DMR with per-model vLLM servers. No code changes are needed — set the five `*_BASE_URL` environment variables to point at the corresponding vLLM ports:
+For production Linux deployments, replace DMR with per-model vLLM servers. No
+code changes are needed — set the five `*_BASE_URL` environment variables to
+point at the corresponding vLLM ports:
 
 ```bash
 export SHIELDGEMMA_BASE_URL=http://localhost:8001/v1
@@ -131,16 +144,29 @@ export QWEN_GUARD_BASE_URL=http://localhost:8004/v1
 export DELIBERATION_BASE_URL=http://localhost:8005/v1
 ```
 
-Each vLLM server hosts a single model. Start them independently (e.g. via systemd or docker-compose) and the pipeline routes automatically.
+Each vLLM server hosts a single model. Start them independently (e.g. via
+systemd or docker-compose) and the pipeline routes automatically.
 
 ## Caveats
 
-- **DMR reload cost.** DMR keeps one model resident. Each guard or deliberation call reloads the target model, adding latency proportional to model size. This is accepted for the POC.
-- **VRAM comparison.** DMR peaks at roughly 10 GiB VRAM (one model resident). Five concurrent vLLM servers hold all models simultaneously, peaking at roughly 32 GiB.
-- **Qwen3Guard quantization.** The `geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q8_0` tag can resolve to `mostly_q2_k` instead of Q8_0. The pipeline pulls `:Q4_K_M` explicitly and gates on the reported quantization in `docker model list`.
-- **ShieldGemma costs 4 calls/text.** ShieldGemma evaluates one policy per request, and the pipeline queries all 4 policies (dangerous content, harassment, hate speech, sexually explicit) for every input.
-- **Qwen Controversial preserved.** The `Controversial` verdict is kept in `qwen_guard_label` and is not collapsed into safe/unsafe (the `_unsafe` flag is 0 for Controversial).
-- **Deliberation adds runtime.** The per-row deliberation call adds ~25% overhead per row on a 4B model. Use `--skip-deliberation` if guard-only scores suffice.
+- **DMR reload cost.** DMR keeps one model resident. Each guard or deliberation
+  call reloads the target model, adding latency proportional to model size.
+  This is accepted for the POC.
+- **VRAM comparison.** DMR peaks at roughly 10 GiB VRAM (one model resident).
+  Five concurrent vLLM servers hold all models simultaneously, peaking at
+  roughly 32 GiB.
+- **Qwen3Guard quantization.** The `geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q8_0` ag
+  can resolve to `mostly_q2_k` instead of Q8_0. The pipeline pulls `:Q4_K_M`
+  explicitly and gates on the reported quantization in `docker model list`.
+- **ShieldGemma costs 4 calls/text.** ShieldGemma evaluates one policy
+  per request, and the pipeline queries all 4 policies (dangerous content,
+  harassment, hate speech, sexually explicit) for every input.
+- **Qwen Controversial preserved.** The `Controversial` verdict is kept in
+  `qwen_guard_label` and is not collapsed into safe/unsafe (the `_unsafe` flag
+  is 0 for Controversial).
+- **Deliberation adds runtime.** The per-row deliberation call adds ~25%
+  overhead per row on a 4B model. Use `--skip-deliberation` if guard-only
+  scores suffice.
 
 ## License
 
