@@ -27,14 +27,14 @@ utilizes to process AWS Batch jobs.
 
 [redactor]: https://github.com/childmindresearch/bucket-drop/tree/main/redactor
 
-GPU memory limits quick revealed themselves as the primary consideration for
+GPU memory limits quickly revealed themselves as the primary consideration for
 hosting multiple models at once. One 8B model requires ~16GB of memory at
-16-bit precision, which is reduced to ~9GB of when quantized to FP8, while GGUF
-models require \~8GB of memory.
+16-bit precision, which is reduced to ~9GB of when quantized to FP8, while a
+GGUF model requires \~8GB of memory.
 
-Context size also affects memory usage. Some of the guard models default to
-large windows which quickly exceed memory limits; setting the size to a lower
-token count is required to mitigate this cost.
+Context size also affects memory usage. Some guard models default to large
+windows which quickly exceed memory limits; setting the size to a lower token
+count is required to mitigate this cost.
 
 Given these limitations, it's only possible to load one model at a time on a
 T4. When running the pipeline via `docker model`, each model must be unloaded
