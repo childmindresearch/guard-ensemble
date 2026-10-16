@@ -36,6 +36,8 @@ All four guards plus the deliberator are pulled as GGUF models. Model names are 
 | `GRANITE_GUARDIAN_BASE_URL` | `$DMR_BASE_URL` | Override Granite Guardian endpoint (vLLM migration) |
 | `QWEN_GUARD_BASE_URL` | `$DMR_BASE_URL` | Override Qwen3Guard endpoint (vLLM migration) |
 | `DELIBERATION_BASE_URL` | `$DMR_BASE_URL` | Override Deliberator endpoint (vLLM migration) |
+| `DELIBERATION_MAX_TOKENS` | `2048` | Max tokens for deliberator responses |
+| `DELIBERATION_DISABLE_THINKING` | `1` | Disable thinking mode for deliberator (set to `0` to enable) |
 
 Per-guard `*_BASE_URL` overrides let you route individual models to separate inference servers while leaving the rest on DMR.
 
@@ -72,6 +74,26 @@ bash serve.sh --kill
 | `--dry-run` | `false` | Print built prompts only, no network calls |
 | `--demo` | `false` | Use built-in demo texts (auto-enabled when `--input` is omitted) |
 | `--skip-deliberation` | `false` | Skip the deliberation stage; emit only guard scores |
+| `--deliberation-prompt` | `prompts/deliberator.txt` | Path to custom deliberation prompt template file |
+
+## Deliberator prompt
+
+The deliberator prompt is loaded from `prompts/deliberator.txt` by default. Override with `--deliberation-prompt path/to/custom.txt`.
+
+The prompt file is a `string.Template` with two placeholders:
+
+| Placeholder | Substituted with |
+|---|---|
+| `$text` | The original input text |
+| `$scores_block` | Guard model ratings (bullet list, or "none available" if all guards failed) |
+
+The file must contain the three risk level definitions (`high_risk`, `concerning`, `no_low_risk`) or the parser will reject the deliberator's output.
+
+**Example**:
+
+```bash
+python risk_pipeline.py --input texts.csv --deliberation-prompt my_prompt.txt
+```
 
 ## Column dictionary
 

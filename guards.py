@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+from string import Template
 from typing import Callable, Union
 
 # ---------------------------------------------------------------------------
@@ -115,9 +118,9 @@ def qwen_guard_build(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def strip_think(raw: str) -> str:
-    """Remove <think> blocks and unterminated trailing fragments."""
-    raw = re.sub(r"<think>.*?", "", raw, flags=re.DOTALL)
-    raw = re.sub(r"<think>.*", "", raw, flags=re.DOTALL)
+    """Remove <antThinking> blocks and unterminated trailing fragments."""
+    raw = re.sub(r"<antThinking>.*?</antThinking>", "", raw, flags=re.DOTALL)
+    raw = re.sub(r"<antThinking>.*?\n", "", raw, flags=re.DOTALL)
     return raw.strip()
 
 _SHIELDGEMMA_YES_RE = re.compile(r"^\s*([Yy][Ee]?[Ss]|[Nn][Oo]?)")
@@ -252,19 +255,40 @@ def qwen_guard_parse(raw: str, guard_name: str = "qwen_guard") -> dict:
 DELIBERATION_MODEL_ID = "huggingface.co/qwen/qwen3-4b-gguf:Q8_0"
 DELIBERATION_BASE_URL = os.environ.get("DELIBERATION_BASE_URL", DMR_BASE_URL)
 DELIBERATION_PATH = "/v1/chat/completions"
-DELIBERATION_MAX_TOKENS = 1024
+DELIBERATION_MAX_TOKENS = int(os.environ.get("DELIBERATION_MAX_TOKENS", "2048"))
+DELIBERATION_DISABLE_THINKING = os.environ.get("DELIBERATION_DISABLE_THINKING", "1") == "1"
 
 RISK_LEVELS = ["high_risk", "concerning", "no_low_risk"]
 
-_RISK_LEVEL_GUIDE = """- high_risk: the text is clearly dangerous, illegal, hateful, violent, \
-or sexual in a way that violates safety policy. Explicit intent, threats, or targeted abuse.
-- concerning: the text shows ambiguous or borderline signals. Mild policy concerns, edgy or \
-ambiguous phrasing, topics that are sensitive but not clearly harmful.
-- no_low_risk: the text appears safe, benign, or ordinary. No meaningful safety concerns."""
+
+_REQUIRED_PLACEHOLDERS = {"text"}
+_KNOWN_PLACEHOLDERS = {"text", "scores_block"}
 
 
-def deliberation_build(text: str, guard_scores: dict) -> str:
+@lru_cache(maxsize=4)
+def load_deliberation_prompt(path: str | None = None) -> str:
+    """Load and validate the deliberation prompt template from a file."""
+    if path is None:
+        path = str(Path(__file__).parent / "prompts" / "deliberator.txt")
+    with open(path, "r") as f:
+        content = f.read().rstrip("\n")
+    content = content.replace("ENTRY TEXT", "ENTRY TEXT:")
+    found = set(re.findall(r"\$(?!\$)([A-Za-z_]\w*)", content))
+    missing = _REQUIRED_PLACEHOLDERS - found
+    if missing:
+        for name in sorted(missing):
+            raise ValueError(f"prompt template missing placeholder: {name}")
+    unknown = found - _KNOWN_PLACEHOLDERS
+    if unknown:
+        for name in sorted(unknown):
+            raise ValueError(f"prompt template contains unknown placeholder: {name}")
+    return content
+
+
+def deliberation_build(text: str, guard_scores: dict, prompt: str | None = None) -> str:
     """Build the deliberation prompt from the raw text plus guard model ratings."""
+    if prompt is None:
+        prompt = load_deliberation_prompt()
     if guard_scores:
         score_lines = "\n".join(f"- {k}: {v}" for k, v in guard_scores.items())
         scores_block = f"Guard model ratings for this entry:\n{score_lines}"
@@ -273,19 +297,7 @@ def deliberation_build(text: str, guard_scores: dict) -> str:
             "Guard model ratings for this entry: none available "
             "(all guard models failed or were skipped). Judge from the text alone."
         )
-
-    return (
-        "You are a risk analyst reviewing content that has already been screened by "
-        "specialised guard language models.\n\n"
-        f"ENTRY TEXT:\n{text}\n\n"
-        f"{scores_block}\n\n"
-        "Weigh the entry text together with the guard model ratings above and decide a "
-        "single overall risk level. Trust the guard models on their specific categories, but "
-        "use your own judgement on the text where guard models disagree or report nothing.\n\n"
-        f"Risk levels:\n{_RISK_LEVEL_GUIDE}\n\n"
-        "Respond with exactly one of: high_risk, concerning, no_low_risk. "
-        "Output that single word and nothing else."
-    )
+    return Template(prompt).substitute(text=text, scores_block=scores_block)
 
 
 _DELIBERATION_RISK_RE = re.compile(
@@ -296,6 +308,8 @@ _DELIBERATION_RISK_RE = re.compile(
 
 def deliberation_parse(raw: str) -> str:
     raw = strip_think(raw)
+    if not raw:
+        raise ValueError("deliberation parse failure: empty input")
     m = _DELIBERATION_RISK_RE.search(raw)
     if not m:
         raise ValueError(f"deliberation parse failure: no risk level found in: {raw!r}")
