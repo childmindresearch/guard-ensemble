@@ -165,12 +165,13 @@ python risk_pipeline.py --input texts.csv \
 | `qwen_guard_category` | Comma-separated categories, or `None` |
 | `<guard>_error` | Error message if that guard failed (one column per guard) |
 | `domain_results` | JSON object: per-domain tier, timing, flags, evidence |
-| `highest_domain_tier` | Highest tier among known domain ratings |
+| `highest_domain_tier` | Highest tier among known domain ratings (uses enum ordering green < yellow < red, not string ordering). Set to `unknown` when no domains returned a tier. |
 | `escalated_tier` | Tier after escalation rules applied |
 | `escalation_reasons` | Comma-separated escalation triggers |
 | `minimum_tier` | Tier after minimum-rating rules applied |
 | `minimum_reasons` | Comma-separated minimum triggers |
 | `floor_tier` | Final deterministic floor before LLM consolidation |
+| `floor_reasons` | Comma-separated reasons the floor was raised (e.g. `domain_unavailable`, escalation flags, minimum triggers). Empty string when no rule raised the floor. |
 | `consolidated_tier` | Tier after consolidation LLM pass |
 | `consolidation_rationale` | Rationale from consolidation LLM |
 | `final_tier` | Tier after final-update LLM pass |
@@ -206,7 +207,9 @@ Each vLLM server hosts a single model. Start them independently (e.g. via system
 - **Qwen Controversial preserved.** The `Controversial` verdict is kept in `qwen_guard_label` and is not collapsed into safe/unsafe (the `_unsafe` flag is 0 for Controversial).
 - **Custom-prompt runtime.** The domain-prompt stage dominates runtime: 21 domains × N runs (default N=3) = 63 calls per entry. Each call reloads the model via DMR. Lower `--custom-runs` to reduce cost.
 - **JSON-column size.** The `domain_results` column stores a full JSON object per row (21 domains with tier, timing, flags, evidence). CSV row sizes can be large.
-- **Unknown-domain Yellow floor.** If any domain prompt fails (network error, parse failure), that domain is marked `unknown` and the deterministic floor phase raises to at least Yellow. This is conservative: uncertainty cannot be safely treated as low risk.
+- **Unknown-domain Yellow floor.** If any domain prompt fails (network error, parse failure), that domain is marked `unknown` and the deterministic floor phase raises to at least Yellow, emitting `domain_unavailable` in `floor_reasons`. This is conservative: uncertainty cannot be safely treated as low risk. The same floor applies when the custom-prompt stage returns empty results (all domains unavailable).
+- **highest_domain_tier uses enum ordering.** Tier comparison uses green < yellow < red (enum order), not alphabetical string ordering. When no domains return a known tier, this column is set to `unknown`.
+- **Empty custom-prompt stage is not safe.** If the custom-prompt stage fails entirely (exception, empty domain results), `domain_incomplete` is set and the floor is raised to Yellow. An empty stage is never treated as safe coverage.
 - **14-day cross-entry rule.** The rubric requires escalating a domain to Red if the same domain is Yellow in 2+ entries within 14 days for a participant. This rule is applied downstream (after the pipeline), across all rows — the pipeline processes entries independently.
 
 ## License

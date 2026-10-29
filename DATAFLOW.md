@@ -35,7 +35,7 @@ flowchart TD
         D --> R1["highest_tier: max known domain tier"]
         R1 --> R2["escalation: Yellow->Red if escalation flags<br/>or multi-domain yellow"]
         R2 --> R3["minimums: Yellow floor for minors+abuse<br/>or lifetime-history flags"]
-        R3 --> R4["unknown floor: Yellow if any domain unknown"]
+        R3 --> R4["unknown floor: Yellow if any domain unknown/empty<br/>emits floor_reasons (e.g. domain_unavailable)"]
         R4 --> R5["floor_tier: max of all phases"]
     end
 
@@ -79,6 +79,8 @@ flowchart TD
   before domain prompts begin; domain prompts complete before deterministic rules
   run; deterministic rules complete before consolidation; consolidation completes
   before final update.
+- **highest_domain_tier uses enum ordering.** Tier comparison uses the enum order green(0) < yellow(1) < red(2), not alphabetical string ordering. When no domains return a known tier, the column is `unknown`.
+- **domain_incomplete is honored from the custom-prompt stage.** If the custom-prompt stage fails or returns empty results, `domain_incomplete` is set to true before deterministic rules run. The unknown-floor phase then raises to Yellow.
 - **Three canonical tiers.** The system uses `green`, `yellow`, `red`. A legacy
   column `final_risk` maps to `no_low_risk`, `concerning`, `high_risk` for
   backward compatibility.
