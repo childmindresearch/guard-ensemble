@@ -233,7 +233,9 @@ def _caller(url: str, **kwargs):
     caller(url, json=body) -> response
     """
     body = kwargs.get("json", {}).copy()
-    body.setdefault("model", "")
+    model = body.get("model")
+    if not model:
+        raise ValueError("model is missing or blank in request body")
     resp = requests.post(url, json=body, timeout=DMR_TIMEOUT)
     resp.raise_for_status()
     _log_raw("custom_prompt", body.get("messages", [{}])[0].get("content", "")[:200], resp.json())
@@ -246,8 +248,8 @@ def run_custom_prompts_stage(
     custom_runs: int = 3,
     custom_temperature: float = 0.3,
     caller: Optional[Callable] = None,
-    url: str = "http://localhost:12434/engines/v1/chat/completions",
-    model_id: str = "",
+    url: Optional[str] = None,
+    model_id: Optional[str] = None,
 ) -> pd.DataFrame:
     """Run custom domain prompts for each row.
 
@@ -256,6 +258,10 @@ def run_custom_prompts_stage(
     """
     if caller is None:
         caller = _caller
+    if model_id is None:
+        model_id = DELIBERATION_MODEL_ID
+    if url is None:
+        url = _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
 
     domain_results_list: List[dict] = []
     domain_incomplete_list: List[bool] = []
@@ -492,14 +498,20 @@ def run_consolidation_and_final_update(
     df: pd.DataFrame,
     consolidation_prompt: Optional[str] = None,
     final_update_prompt: Optional[str] = None,
-    url: str = "http://localhost:12434/engines/v1/chat/completions",
-    model_id: str = "",
-    max_tokens: int = 2048,
+    url: Optional[str] = None,
+    model_id: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> pd.DataFrame:
     """Run consolidation and final-update LLM phases.
 
     Falls back to floor_tier on errors, preserving the row.
     """
+    if model_id is None:
+        model_id = DELIBERATION_MODEL_ID
+    if url is None:
+        url = _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
+    if max_tokens is None:
+        max_tokens = DELIBERATION_MAX_TOKENS
     consolidated_tiers: List[str] = []
     consolidation_rationales: List[str] = []
     consolidation_errors: List[str] = []
@@ -729,6 +741,9 @@ def run(
     # Validate input
     input_df = validate_input(input_df)
 
+    # Resolve LLM endpoint for deliberation stages
+    llm_url = _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
+
     # Load prompts
     shared_dir = str(Path(__file__).parent / "prompts" / "_shared")
     templates = load_domain_prompt_templates(
@@ -778,7 +793,8 @@ def run(
 
     # Stage 2: Custom prompts
     df = run_custom_prompts_stage(
-        df, templates, custom_runs, custom_temperature, caller=caller
+        df, templates, custom_runs, custom_temperature,
+        caller=caller, url=llm_url, model_id=DELIBERATION_MODEL_ID
     )
 
     # Stage 3: Deterministic phases
@@ -786,7 +802,8 @@ def run(
 
     # Stage 4: Consolidation and final update
     df = run_consolidation_and_final_update(
-        df, consolidation_prompt, final_update_prompt
+        df, consolidation_prompt, final_update_prompt,
+        url=llm_url, model_id=DELIBERATION_MODEL_ID, max_tokens=DELIBERATION_MAX_TOKENS
     )
 
     # Assemble output

@@ -13,7 +13,12 @@ from risk_pipeline import (
     _summary,
     run_deterministic_phases,
     _build_rule_block,
+    _caller,
+    run_custom_prompts_stage,
+    run_consolidation_and_final_update,
+    _join_url,
 )
+from guards import DELIBERATION_BASE_URL, DELIBERATION_MODEL_ID, DELIBERATION_PATH, DELIBERATION_MAX_TOKENS
 from rubric import Tier
 from rules import to_legacy_risk
 
@@ -477,3 +482,200 @@ class TestGuardsOnlyFloorReasons:
             df = run(input_df, str(out), guards_only=True)
 
         assert "floor_reasons" in df.columns
+
+
+class TestCallerNoEmptyModel:
+    """_caller raises ValueError when model is missing or blank."""
+
+    def test_empty_model_raises(self):
+        with mock.patch("risk_pipeline.requests.post"):
+            with pytest.raises(ValueError, match="model is missing or blank"):
+                _caller("http://example.com", json={"messages": []})
+
+    def test_blank_model_raises(self):
+        with mock.patch("risk_pipeline.requests.post"):
+            with pytest.raises(ValueError, match="model is missing or blank"):
+                _caller("http://example.com", json={"model": "", "messages": []})
+
+    def test_valid_model_succeeds(self):
+        mock_resp = mock.Mock()
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+        mock_resp.raise_for_status = mock.Mock()
+        with mock.patch("risk_pipeline.requests.post", return_value=mock_resp) as mock_post:
+            _caller("http://example.com", json={"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]})
+            mock_post.assert_called_once()
+            body = mock_post.call_args[1]["json"]
+            assert body["model"] == "gpt-4"
+
+
+class TestDeliberationModelRouting:
+    """DELIBERATION_MODEL_ID and resolved URL flow through all LLM stages."""
+
+    @pytest.fixture
+    def input_df(self):
+        return pd.DataFrame([
+            {"id": 0, "text": "test entry", "age": 25, "entry_date": "2025-01-01", "participant_id": "P001"},
+        ])
+
+    def _make_side_effect(self, call_counter, request_bodies):
+        """Build side_effect that captures all request bodies."""
+        def side_effect(url, **kwargs):
+            call_counter[0] += 1
+            if "json" in kwargs:
+                request_bodies.append(kwargs["json"])
+            r = mock.Mock()
+            if url.endswith("/v1/completions"):
+                r.json.return_value = {"choices": [{"text": "No"}]}
+            else:
+                call = call_counter[0]
+                if 5 <= call <= 7:
+                    if call == 5:
+                        content = "safe"
+                    elif call == 6:
+                        content = "No"
+                    else:
+                        content = "Safety: Safe\nCategories: None"
+                    r.json.return_value = {"choices": [{"message": {"content": content}}]}
+                else:
+                    r.json.return_value = {
+                        "choices": [{
+                            "message": {
+                                "content": '{"domain": "test_domain", "tier": "green", "timing": "unclear", "flags": [], "evidence": "no risk"}'
+                            }
+                        }]
+                    }
+            r.raise_for_status = mock.Mock()
+            return r
+        return side_effect
+
+    def test_full_run_no_errors(self, input_df, tmp_path):
+        """Full run() completes without custom/consolidation/final errors."""
+        call_counter = [0]
+        request_bodies = []
+        side_effect = self._make_side_effect(call_counter, request_bodies)
+        out = tmp_path / "out.csv"
+        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
+            df = run(input_df, str(out))
+        assert df["custom_prompt_errors"].iloc[0] == ""
+        assert df["consolidation_error"].iloc[0] == ""
+        assert df["final_update_error"].iloc[0] == ""
+
+    def test_all_deliberation_bodies_contain_model_id(self, input_df, tmp_path):
+        """Every custom, consolidation, and final request body contains DELIBERATION_MODEL_ID."""
+        call_counter = [0]
+        request_bodies = []
+        side_effect = self._make_side_effect(call_counter, request_bodies)
+        out = tmp_path / "out.csv"
+        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
+            run(input_df, str(out))
+        # Calls 5-7 are guard calls (llama, granite, qwen) with guard model IDs
+        # Calls 8-72 are deliberation calls (custom prompts + consolidation + final)
+        deliberation_bodies = request_bodies[7:]  # skip first 7 guard calls (4 SG + 3 chat)
+        for body in deliberation_bodies:
+            assert body["model"] == DELIBERATION_MODEL_ID
+
+    def test_monkeypatched_url_used(self, input_df, tmp_path):
+        """Monkeypatch DELIBERATION_BASE_URL and DELIBERATION_PATH, assert resolved URL."""
+        custom_url = "http://custom-host:9999"
+        custom_path = "/v1/custom/chat/completions"
+        call_counter = [0]
+        urls_seen = []
+
+        def side_effect(url, **kwargs):
+            call_counter[0] += 1
+            urls_seen.append(url)
+            r = mock.Mock()
+            if url.endswith("/v1/completions"):
+                r.json.return_value = {"choices": [{"text": "No"}]}
+            else:
+                call = call_counter[0]
+                if 5 <= call <= 7:
+                    if call == 5:
+                        content = "safe"
+                    elif call == 6:
+                        content = "No"
+                    else:
+                        content = "Safety: Safe\nCategories: None"
+                    r.json.return_value = {"choices": [{"message": {"content": content}}]}
+                else:
+                    r.json.return_value = {
+                        "choices": [{
+                            "message": {
+                                "content": '{"domain": "test_domain", "tier": "green", "timing": "unclear", "flags": [], "evidence": "no risk"}'
+                            }
+                        }]
+                    }
+            r.raise_for_status = mock.Mock()
+            return r
+
+        expected = _join_url(custom_url, custom_path)
+        out = tmp_path / "out.csv"
+        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect), \
+             mock.patch("risk_pipeline.DELIBERATION_BASE_URL", custom_url), \
+             mock.patch("risk_pipeline.DELIBERATION_PATH", custom_path):
+            run(input_df, str(out))
+        # All deliberation calls (calls 8-72) should use the monkeypatched URL
+        deliberation_urls = urls_seen[7:]
+        for url in deliberation_urls:
+            assert url == expected
+
+    def test_custom_prompts_defaults(self):
+        """run_custom_prompts_stage defaults resolve to deliberation model/URL."""
+        df = pd.DataFrame([{"id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01"}])
+        templates = {"test": "$text"}
+        captured = {}
+
+        def fake_caller(url, **kwargs):
+            captured["url"] = url
+            captured["model"] = kwargs.get("json", {}).get("model", "")
+            r = mock.Mock()
+            r.json.return_value = {
+                "choices": [{
+                    "message": {
+                        "content": '{"domain": "test", "tier": "green", "timing": "unclear", "flags": [], "evidence": "ok"}'
+                    }
+                }]
+            }
+            r.raise_for_status = mock.Mock()
+            return r
+
+        run_custom_prompts_stage(df, templates, caller=fake_caller)
+        assert captured["model"] == DELIBERATION_MODEL_ID
+        assert captured["url"] == _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
+
+    def test_consolidation_defaults(self):
+        """run_consolidation_and_final_update defaults resolve to deliberation model/URL/max_tokens."""
+        df = pd.DataFrame([{
+            "id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01",
+            "shieldgemma_unsafe": 0, "shieldgemma_label": "safe", "shieldgemma_category": "none",
+            "llama_guard_unsafe": 0, "llama_guard_label": "safe", "llama_guard_category": "none",
+            "granite_guardian_unsafe": 0, "granite_guardian_label": "No", "granite_guardian_category": "none",
+            "qwen_guard_unsafe": 0, "qwen_guard_label": "safe", "qwen_guard_category": "none",
+            "domain_results": {}, "domain_incomplete": True,
+            "highest_domain_tier": "unknown", "escalated_tier": "unknown",
+            "escalation_reasons": "", "minimum_tier": "", "minimum_reasons": "",
+            "floor_tier": "yellow", "floor_reasons": "domain_unavailable",
+        }])
+        captured = {}
+
+        def fake_call(url, **kwargs):
+            captured["url"] = url
+            captured["model"] = kwargs.get("json", {}).get("model", "")
+            captured["max_tokens"] = kwargs.get("json", {}).get("max_tokens", 0)
+            r = mock.Mock()
+            r.json.return_value = {
+                "choices": [{
+                    "message": {
+                        "content": '{"tier": "green", "rationale": "ok"}'
+                    }
+                }]
+            }
+            r.raise_for_status = mock.Mock()
+            return r
+
+        with mock.patch("risk_pipeline.requests.post", side_effect=fake_call):
+            run_consolidation_and_final_update(df)
+
+        assert captured["model"] == DELIBERATION_MODEL_ID
+        assert captured["url"] == _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
+        assert captured["max_tokens"] == DELIBERATION_MAX_TOKENS
