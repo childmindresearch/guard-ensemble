@@ -11,6 +11,8 @@ from risk_pipeline import (
     run,
     validate_input,
     _summary,
+    run_deterministic_phases,
+    _build_rule_block,
 )
 from rubric import Tier
 from rules import to_legacy_risk
@@ -193,7 +195,7 @@ class TestMockedEndToEnd:
             "id", "text", "participant_id", "age", "entry_date",
             "domain_results", "highest_domain_tier", "escalated_tier",
             "escalation_reasons", "minimum_tier", "minimum_reasons",
-            "floor_tier", "consolidated_tier", "consolidation_rationale",
+            "floor_tier", "floor_reasons", "consolidated_tier", "consolidation_rationale",
             "final_tier", "final_rationale", "final_adjusted", "final_risk",
             "domain_incomplete", "custom_prompt_errors",
             "consolidation_error", "final_update_error", "errors",
@@ -364,3 +366,114 @@ class TestMainCLI:
         assert out.exists()
         # 4 demo rows x 7 guards = 28 calls
         assert call_counter[0] == 28
+
+
+class TestDeterministicPhases:
+    """Deterministic phases: tier ordering, incompleteness, floor_reasons."""
+
+    def _make_df(self, domain_results, domain_incomplete=False):
+        """Helper to build a minimal DataFrame for run_deterministic_phases."""
+        return pd.DataFrame([{
+            "id": 0, "text": "test", "age": 25, "entry_date": "2025-01-01",
+            "domain_results": domain_results,
+            "domain_incomplete": domain_incomplete,
+        }])
+
+    def test_empty_domain_results(self):
+        """Empty domain_results yields incomplete=True, floor=yellow, domain_unavailable reason."""
+        df = self._make_df({})
+        result = run_deterministic_phases(df)
+        assert result["domain_incomplete"].iloc[0] == True
+        assert result["highest_domain_tier"].iloc[0] == "unknown"
+        assert result["floor_tier"].iloc[0] == "yellow"
+        assert "domain_unavailable" in result["floor_reasons"].iloc[0]
+
+    def test_custom_stage_exception_sets_domain_incomplete(self):
+        """When custom stage sets domain_incomplete=True, deterministic phase preserves it."""
+        df = self._make_df({}, domain_incomplete=True)
+        result = run_deterministic_phases(df)
+        assert result["domain_incomplete"].iloc[0] == True
+        assert "domain_unavailable" in result["floor_reasons"].iloc[0]
+
+    def test_one_unknown_plus_all_green(self):
+        """One unknown + all green -> incomplete, floor yellow."""
+        dr = {
+            "a": {"tier": "green", "flags": []},
+            "b": {"tier": "green", "flags": []},
+            "c": {"tier": "unknown", "flags": []},
+        }
+        df = self._make_df(dr)
+        result = run_deterministic_phases(df)
+        assert result["domain_incomplete"].iloc[0] == True
+        assert result["highest_domain_tier"].iloc[0] == "green"
+        assert result["floor_tier"].iloc[0] == "yellow"
+        assert "domain_unavailable" in result["floor_reasons"].iloc[0]
+
+    def test_red_plus_yellow_highest_is_red(self):
+        """red + yellow -> highest_domain_tier == red."""
+        dr = {
+            "a": {"tier": "red", "flags": []},
+            "b": {"tier": "yellow", "flags": []},
+        }
+        df = self._make_df(dr)
+        result = run_deterministic_phases(df)
+        assert result["highest_domain_tier"].iloc[0] == "red"
+
+    def test_green_yellow_red_highest_is_red(self):
+        """green + yellow + red -> highest_domain_tier == red (tier ordering, not lexicographic)."""
+        dr = {
+            "a": {"tier": "green", "flags": []},
+            "b": {"tier": "yellow", "flags": []},
+            "c": {"tier": "red", "flags": []},
+        }
+        df = self._make_df(dr)
+        result = run_deterministic_phases(df)
+        assert result["highest_domain_tier"].iloc[0] == "red"
+
+    def test_floor_reasons_persisted(self):
+        """floor_reasons column is written by run_deterministic_phases."""
+        dr = {"a": {"tier": "green", "flags": ["minor_abuse_disclosure"]}}
+        df = self._make_df(dr)
+        result = run_deterministic_phases(df)
+        assert "floor_reasons" in result.columns
+
+    def test_rule_block_includes_new_fields(self):
+        """_build_rule_block includes highest_domain_tier, domain_incomplete, floor_reasons."""
+        row = {
+            "highest_domain_tier": "red",
+            "domain_incomplete": True,
+            "escalated_tier": "yellow",
+            "escalation_reasons": "",
+            "minimum_tier": "",
+            "minimum_reasons": "",
+            "floor_tier": "red",
+            "floor_reasons": "domain_unavailable",
+        }
+        block = _build_rule_block(row)
+        assert "Highest domain tier: red" in block
+        assert "Domain coverage incomplete: True" in block
+        assert "Floor reasons: domain_unavailable" in block
+
+
+class TestGuardsOnlyFloorReasons:
+    """Guards-only mode includes floor_reasons column."""
+
+    def test_guards_only_includes_floor_reasons(self, tmp_path):
+        input_df = pd.DataFrame([
+            {"id": 0, "text": "test", "age": 25, "entry_date": "2025-01-01"},
+        ])
+
+        def side_effect(url, **kwargs):
+            r = mock.Mock()
+            if url.endswith("/v1/completions"):
+                r.json.return_value = {"choices": [{"text": "No"}]}
+            else:
+                r.json.return_value = {"choices": [{"message": {"content": "safe"}}]}
+            r.raise_for_status = mock.Mock()
+            return r
+
+        out = tmp_path / "out.csv"
+        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
+            df = run(input_df, str(out), guards_only=True)
+
+        assert "floor_reasons" in df.columns

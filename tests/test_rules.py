@@ -45,7 +45,7 @@ class TestHighestTier:
     def test_empty(self):
         result = highest_tier({})
         assert result.tier is None
-        assert result.incomplete is False
+        assert result.incomplete is True
 
     def test_unknown_does_not_dilute_red(self):
         result = highest_tier({"a": Tier.red, "b": None, "c": None})
@@ -293,3 +293,15 @@ class TestResolve:
         assert d.tier is Tier.red
         assert "lethal_means_access" in d.reasons
         assert "past_self_harm" in d.reasons
+
+    def test_empty_domain_results_returns_yellow(self):
+        """Empty domain coverage should floor to yellow with domain_unavailable reason."""
+        d = resolve({})
+        assert d.tier is Tier.yellow
+        assert "domain_unavailable" in d.reasons
+
+    def test_one_unknown_plus_all_green_floors_to_yellow(self):
+        """One unknown domain with all others green should floor to yellow."""
+        d = resolve({"a": Tier.green, "b": Tier.green, "c": None})
+        assert d.tier is Tier.yellow
+        assert "domain_unavailable" in d.reasons

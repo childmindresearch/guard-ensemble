@@ -251,13 +251,13 @@ def run_custom_prompts_stage(
 ) -> pd.DataFrame:
     """Run custom domain prompts for each row.
 
-    Adds domain_results, highest_domain_tier, domain_incomplete, custom_prompt_errors columns.
+    Adds domain_results, domain_incomplete, custom_prompt_errors columns.
+    highest_domain_tier is computed deterministically in run_deterministic_phases.
     """
     if caller is None:
         caller = _caller
 
     domain_results_list: List[dict] = []
-    highest_tiers: List[str] = []
     domain_incomplete_list: List[bool] = []
     custom_errors_list: List[str] = []
 
@@ -293,19 +293,16 @@ def run_custom_prompts_stage(
                     all_errors.extend(result.errors)
 
             domain_results_list.append(serializable)
-            highest_tiers.append(max((r.tier for r in results.values()), default=TIER_UNKNOWN) if results else TIER_UNKNOWN)
             domain_incomplete_list.append(any(r.tier == TIER_UNKNOWN for r in results.values()))
             custom_errors_list.append(";".join(all_errors) if all_errors else "")
 
         except Exception as e:
             domain_results_list.append({})
-            highest_tiers.append(TIER_UNKNOWN)
             domain_incomplete_list.append(True)
             custom_errors_list.append(f"custom_prompts_stage_error: {e}")
 
     df = df.copy()
     df["domain_results"] = domain_results_list
-    df["highest_domain_tier"] = highest_tiers
     df["domain_incomplete"] = domain_incomplete_list
     df["custom_prompt_errors"] = custom_errors_list
     return df
@@ -336,12 +333,16 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
     """Run deterministic rule phases: highest -> escalation -> minimums -> unknown floor -> floor.
 
     Uses domain_results JSON to extract domain tiers and flags.
+    Computes and writes domain_incomplete, highest_domain_tier, and floor_reasons.
     """
     escalated_tiers: List[str] = []
     escalation_reasons_list: List[str] = []
     minimum_tiers: List[str] = []
     minimum_reasons_list: List[str] = []
     floor_tiers: List[str] = []
+    domain_incomplete_list: List[bool] = []
+    highest_tiers: List[str] = []
+    floor_reasons_list: List[str] = []
 
     for _, row in df.iterrows():
         domain_results = row.get("domain_results", {})
@@ -350,6 +351,9 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
                 domain_results = json.loads(domain_results)
             except (json.JSONDecodeError, TypeError):
                 domain_results = {}
+
+        # Read stage-level incompleteness from custom prompts stage
+        stage_domain_incomplete = bool(row.get("domain_incomplete", False))
 
         # Build domain_tiers dict: domain -> Tier or None
         domain_tiers: Dict[str, Optional[int]] = {}
@@ -368,6 +372,9 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
         # Phase 1: highest_tier
         ht_result = highest_tier(domain_tiers)
 
+        # Combine stage incompleteness with highest_tier incompleteness
+        incomplete = stage_domain_incomplete or ht_result.incomplete
+
         # Phase 2: escalation
         yellow_count = sum(1 for t in domain_tiers.values() if t is Tier.yellow)
         esc = _escalate(ht_result.tier, frozenset(all_flags), yellow_count)
@@ -377,7 +384,7 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
         min_ = _minimums(age, frozenset(all_flags))
 
         # Phase 4: unknown floor
-        unk = _unknown_floor(ht_result.incomplete)
+        unk = _unknown_floor(incomplete)
 
         # Phase 5: floor
         ft = floor_tier(
@@ -390,6 +397,9 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
         minimum_tiers.append(_int_to_tier_str(min_.tier) if min_.tier is not None else "")
         minimum_reasons_list.append(",".join(min_.reasons) if min_.reasons else "")
         floor_tiers.append(_int_to_tier_str(ft.tier))
+        domain_incomplete_list.append(incomplete)
+        highest_tiers.append(TIER_UNKNOWN if ht_result.tier is None else Tier(ht_result.tier).name)
+        floor_reasons_list.append(",".join(ft.reasons) if ft.reasons else "")
 
     df = df.copy()
     df["escalated_tier"] = escalated_tiers
@@ -397,6 +407,9 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
     df["minimum_tier"] = minimum_tiers
     df["minimum_reasons"] = minimum_reasons_list
     df["floor_tier"] = floor_tiers
+    df["domain_incomplete"] = domain_incomplete_list
+    df["highest_domain_tier"] = highest_tiers
+    df["floor_reasons"] = floor_reasons_list
     return df
 
 
@@ -449,11 +462,13 @@ def _build_rule_block(row) -> str:
     """Build rule context block from deterministic phase results."""
     lines = [
         f"Highest domain tier: {row.get('highest_domain_tier', 'unknown')}",
+        f"Domain coverage incomplete: {row.get('domain_incomplete', False)}",
         f"Escalated tier: {row.get('escalated_tier', 'unknown')}",
         f"Escalation reasons: {row.get('escalation_reasons', '')}",
         f"Minimum tier: {row.get('minimum_tier', 'none')}",
         f"Minimum reasons: {row.get('minimum_reasons', '')}",
         f"Floor tier: {row.get('floor_tier', 'unknown')}",
+        f"Floor reasons: {row.get('floor_reasons', '')}",
     ]
     return "\n".join(lines)
 
@@ -582,6 +597,7 @@ OUTPUT_COLUMNS = [
     "minimum_tier",
     "minimum_reasons",
     "floor_tier",
+    "floor_reasons",
     "consolidated_tier",
     "consolidation_rationale",
     "final_tier",
@@ -663,6 +679,7 @@ def _assemble_output_columns(df: pd.DataFrame) -> pd.DataFrame:
         "minimum_tier",
         "minimum_reasons",
         "floor_tier",
+        "floor_reasons",
         "consolidated_tier",
         "consolidation_rationale",
         "final_tier",
@@ -734,7 +751,7 @@ def run(
         # Fill in empty values for remaining columns
         for col in ["domain_results", "highest_domain_tier", "escalated_tier",
                      "escalation_reasons", "minimum_tier", "minimum_reasons",
-                     "floor_tier", "consolidated_tier", "consolidation_rationale",
+                     "floor_tier", "floor_reasons", "consolidated_tier", "consolidation_rationale",
                      "final_tier", "final_rationale", "final_adjusted",
                      "final_risk", "domain_incomplete", "custom_prompt_errors",
                      "consolidation_error", "final_update_error"]:

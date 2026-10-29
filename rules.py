@@ -30,8 +30,10 @@ class HighestTierResult:
 def highest_tier(domain_tiers: Dict[str, Optional[Tier]]) -> HighestTierResult:
     """Return the highest tier among known domains; ignore ``unknown``.
 
-    ``incomplete`` is True when at least one domain has tier ``None``.
+    ``incomplete`` is True when no domains are present or any domain has tier ``None``.
     """
+    if not domain_tiers:
+        return HighestTierResult(tier=None, incomplete=True)
     known = [t for t in domain_tiers.values() if t is not None]
     incomplete = any(t is None for t in domain_tiers.values())
     return HighestTierResult(
