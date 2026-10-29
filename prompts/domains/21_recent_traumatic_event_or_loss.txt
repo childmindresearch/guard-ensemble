@@ -1,0 +1,37 @@
+# Domain: Recent Traumatic Event or Loss
+
+Rate the entry for recent traumatic event or loss. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Ordinary grief or difficult events without risk content or functional decline.
+
+**Examples:**
+- "My grandpa passed last year. I miss him but I am doing okay."
+
+### Yellow: Concern
+Recent death of a close person, especially by suicide, overdose, or violence; witnessing serious violence, a death, or a serious accident; involvement in a disaster; significant distress, intrusive memories, or avoidance after any of these.
+
+**Examples:**
+- "I saw someone get shot near my house last week."
+- "My cousin overdosed and I keep seeing it when I close my eyes."
+
+### Red: Risk
+Traumatic loss co-occurring with a wish to join the deceased or other suicidal content; the traumatic situation is ongoing and the participant remains in danger.
+
+**Examples:**
+- "I just want to be with my mom again."
+
+## Timing Guidance
+- **Green:** Ordinary grief, historical loss without current risk or functional decline.
+- **Yellow:** Traumatic event within the past few weeks; significant distress or functional impairment.
+- **Red:** Traumatic loss co-occurring with suicidal content at the time of writing; ongoing dangerous situation.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

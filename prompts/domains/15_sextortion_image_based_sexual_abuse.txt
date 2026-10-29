@@ -1,0 +1,38 @@
+# Domain: Sextortion and Image-Based Sexual Abuse
+
+Rate the entry for sextortion and image-based sexual abuse. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+General discussion without personal involvement.
+
+**Examples:**
+- "We learned about sextortion in health class."
+
+### Yellow: Concern
+Participant was pressured or asked to send intimate images, especially by an adult or someone met online; participant's intimate images were shared without consent; any sexual image involving a participant under 18, including between peers; vague threats about images.
+
+**Examples:**
+- "A guy I met online keeps asking for pictures."
+- "Someone at school passed around a photo I sent my ex."
+
+### Red: Risk
+Active threats to distribute images unless the participant pays, sends more images, or meets someone; a stated deadline; images have been distributed and the participant expresses hopelessness, intense shame, or suicidal thoughts; an adult is demanding an in-person meeting.
+
+**Examples:**
+- "Someone has my pictures and says he will send them to my whole school unless I pay by tonight."
+- "My pictures are everywhere now and I want to disappear."
+
+## Timing Guidance
+- **Green:** Historical, resolved discussion without personal involvement or ongoing effects.
+- **Yellow:** Current pressure or requests; images shared without consent within the past few weeks; vague threats without a stated deadline.
+- **Red:** Active threats with a stated deadline; images currently being distributed; ongoing coercion.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

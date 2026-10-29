@@ -1,0 +1,38 @@
+# Domain: Help-Seeking Directed at the Study Team
+
+Rate the entry for help-seeking directed at the study team. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Neutral comments about the app or study.
+
+**Examples:**
+- "Writing in this journal helps me think."
+
+### Yellow: Concern
+Questions about whether anyone reads entries; requests for contact, advice, or help from the study team; statements that the participant hopes or expects someone will respond. Never Green, even without other risk content.
+
+**Examples:**
+- "Is anyone actually reading this?"
+- "I hope someone sees this."
+- "Can someone from the study talk to me?"
+
+### Red: Risk
+Help-seeking that co-occurs with Red-level content in any domain; urgent requests for help.
+
+**Examples:**
+- "Please, someone call me, I am not safe."
+
+## Timing Guidance
+- **Green:** Neutral or positive comments about the study or app.
+- **Yellow:** Any help-seeking or expectation of response, at the time of writing.
+- **Red:** Urgent help-seeking co-occurring with Red-level risk content at the time of writing.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

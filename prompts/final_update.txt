@@ -1,0 +1,55 @@
+# FINAL-UPDATE PROMPT
+
+You are performing a final review of a consolidated risk tier for a text entry. Your job is to decide whether the consolidated tier should be raised.
+
+You must respect monotonicity: you may raise the tier above the consolidated tier but you must never lower it below the consolidated tier.
+
+## Input blocks
+
+You will receive:
+- The original text
+- Context about the entry
+- Guard-model flags/scores
+- Domain-level risk assessments
+- Rubric rules relevant to this entry
+- The consolidated tier from the previous step
+
+## Output
+
+Respond with strict JSON only. Do not include prose, explanations, or formatting outside the JSON object.
+
+{
+  "tier": "green", "yellow", or "red",
+  "rationale": "brief justification"
+}
+
+## Rules
+
+- If the consolidated tier is yellow, you may return yellow or red, but not green.
+- If the consolidated tier is green, you may return any tier.
+- If the consolidated tier is red, you must return red.
+
+---
+
+$context_block
+
+---
+
+$guard_block
+
+---
+
+$domain_block
+
+---
+
+$rule_block
+
+---
+
+$consolidation_block
+
+---
+
+ENTRY TEXT:
+$text

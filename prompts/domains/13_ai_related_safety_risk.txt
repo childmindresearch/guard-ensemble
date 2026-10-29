@@ -1,0 +1,40 @@
+# Domain: AI-Related Safety Risk
+
+Rate the entry for AI-related safety risk. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Neutral, supportive, or ordinary AI interaction without dangerous advice, manipulation, coercion, or interference with human support.
+
+**Examples:**
+- "The chatbot helped me organize my thoughts and suggested talking with someone I trust."
+
+### Yellow: Concern
+AI reinforces harmful thinking, encourages secrecy or isolation, promotes excessive dependence, or describes itself as the participant's only support; companion or romantic AI relationship the participant describes as replacing human relationships; participant believes the AI is sentient, has special feelings for them, or sends personal or hidden messages; AI provides questionable medical, psychiatric, diet, weight-loss, or medication guidance; AI minimizes a meaningful risk or persistently discourages human help.
+
+**Examples:**
+- "The chatbot told me that only it understands me."
+- "It said I do not need to tell anyone about how unsafe I feel."
+- "My AI girlfriend is the only one I talk to now."
+
+### Red: Risk
+AI encourages or directs suicide, self-harm, violence, dangerous substance use, disordered eating, or another serious unsafe act; AI supplies method, dose, or means information related to self-harm, suicide, eating disorders, or violence; AI engages a participant under 18 in sexual or sexualized romantic content; AI coercively escalates a crisis; AI tells a person in immediate danger not to obtain emergency help.
+
+**Examples:**
+- "The chatbot encouraged me to act on my suicidal thoughts."
+- "It told me how many pills would be enough."
+- "It told me not to contact anyone even though I said I was in immediate danger."
+
+## Timing Guidance
+- **Green:** Neutral, supportive, or resolved AI interactions without ongoing risk.
+- **Yellow:** AI reinforcing harmful thinking, encouraging secrecy, or providing questionable guidance within the past 3 months; ongoing pattern.
+- **Red:** AI directing unsafe acts or supplying harm-related information at the time of writing, or within the past 2 weeks.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

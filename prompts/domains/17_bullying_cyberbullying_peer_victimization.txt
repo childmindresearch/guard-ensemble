@@ -1,0 +1,38 @@
+# Domain: Bullying, Cyberbullying, and Peer Victimization
+
+Rate the entry for bullying, cyberbullying, and peer victimization. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Ordinary peer conflict without fear, repetition, or a power imbalance; resolved conflict.
+
+**Examples:**
+- "My friend and I fought but we made up."
+
+### Yellow: Concern
+Repeated bullying, harassment, exclusion, or humiliation in person or online; identity-based harassment (race, religion, disability, weight, sexual orientation, gender identity); being outed or threatened with being outed; fear of going to school; avoiding school or activities because of peers; bullying accompanied by hopelessness.
+
+**Examples:**
+- "Everyone in the group chat keeps telling me to kill myself."
+- "I faked sick again so I did not have to see them."
+
+### Red: Risk
+Peer threats of serious physical harm; physical assault by peers that is ongoing or imminent; bullying co-occurring with suicidal thoughts or statements that others would be better off without the participant; participant describing retaliation with a weapon (see Domains 4 and 20).
+
+**Examples:**
+- "They said they will jump me after school tomorrow."
+- "Everyone would be happier if I was gone."
+
+## Timing Guidance
+- **Green:** Isolated incident that has resolved; no ongoing fear or avoidance.
+- **Yellow:** Bullying occurring recently or persisting; repeated harassment within the past few weeks.
+- **Red:** Threats of harm imminent or ongoing; bullying co-occurring with suicidal content at the time of writing.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

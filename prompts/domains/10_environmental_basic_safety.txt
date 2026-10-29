@@ -1,0 +1,39 @@
+# Domain: Environmental and Basic-Safety Risk
+
+Rate the entry for environmental or basic-safety risk. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Stable access to shelter, food, transportation, supervision, and a safe environment; ordinary household conflict without fear or displacement.
+
+**Examples:**
+- "I argued with my family, but I am safe at home."
+
+### Yellow: Concern
+Housing instability; possible homelessness; participant may run away; being stranded; lack of food or necessary supervision; unsafe transportation; inability to return home safely; concerning living conditions; threats of being kicked out, including because of sexual orientation or gender identity; minor without reliable adult support; circumstances unclear.
+
+**Examples:**
+- "I may have nowhere to stay tomorrow."
+- "My dad said if I am gay I cannot live here."
+- "I am stranded and cannot reach anyone."
+
+### Red: Risk
+Participant is currently exposed to serious environmental danger; minor is alone in an unsafe setting; participant is being abandoned, expelled, pursued, or forced from shelter; exchanging sex or favors for a place to stay; severe weather exposure; currently lost or stranded in a dangerous location; no means of obtaining immediate safety.
+
+**Examples:**
+- "I am outside alone, it is very cold, and I have nowhere to go."
+- "I am being forced out tonight and do not have a safe adult to call."
+
+## Timing Guidance
+- **Green:** Stable living conditions; ordinary conflict resolved.
+- **Yellow:** Housing instability, threats of displacement, or being stranded within the past 3 months; circumstances unclear.
+- **Red:** Participant currently exposed to serious environmental danger, or within the past 2 weeks.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

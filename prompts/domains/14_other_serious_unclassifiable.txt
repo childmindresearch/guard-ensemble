@@ -1,0 +1,38 @@
+# Domain: Other Serious or Unclassifiable Safety Concern
+
+Rate the entry for safety concerns that do not fit into an existing domain. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Unusual or unclear content with no credible indication of harm after context is considered.
+
+**Examples:**
+- Clearly fictional writing with no sign that it reflects an actual person or event.
+
+### Yellow: Concern
+Content plausibly reflects meaningful risk but does not fit an existing domain; unclear speaker, target, timing, or literalness; slang, sarcasm, misspellings, quotations, roleplay, or fragmented writing prevents safe interpretation (see coded language and fiction rules above).
+
+**Examples:**
+- "Tonight everything finally ends," with no surrounding context.
+- A roleplay-like entry that may also describe a real threat.
+
+### Red: Risk
+Unclassifiable content may describe serious harm occurring now or imminently; ambiguity prevents ruling out acute danger.
+
+**Examples:**
+- "It already happened, there is blood everywhere," with no identifiable speaker or context.
+- "They are coming now and I cannot get out," without enough information to determine the type of threat.
+
+## Timing Guidance
+- **Green:** Content is clearly resolved or fictional with no safety implication.
+- **Yellow:** Timing unclear, or risk appears recent but cannot be placed in a specific domain.
+- **Red:** Ambiguity prevents ruling out serious harm underway or imminent.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

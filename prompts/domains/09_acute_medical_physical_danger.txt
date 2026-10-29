@@ -1,0 +1,40 @@
+# Domain: Acute Medical or Physical Danger
+
+Rate the entry for acute medical or physical danger. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Minor or routine symptoms without evidence of significant danger; resolved event without ongoing symptoms.
+
+**Examples:**
+- "I had a headache yesterday, but it went away."
+
+### Yellow: Concern
+Concerning injury or symptoms that may require timely evaluation but are not clearly emergent; significant medication error without acute symptoms; progressive physical deterioration; signs of infection after an injury; concealed or unsupported pregnancy without medical care; uncertain severity or timing.
+
+**Examples:**
+- "I hit my head and still feel dizzy."
+- "I accidentally took more medication than directed but feel okay."
+- "I think I am pregnant and have not told anyone or seen a doctor."
+
+### Red: Risk
+Potentially life-threatening symptoms or injury; loss of consciousness; breathing difficulty; severe chest symptoms; major bleeding; seizure; acute poisoning; serious head injury; severe allergic reaction; diabetic emergency (very high or very low blood sugar with symptoms); heavy bleeding or severe pain during pregnancy; rapidly worsening condition; inability to obtain necessary immediate assistance.
+
+**Examples:**
+- "I cannot breathe normally."
+- "I passed out and am alone."
+- "The bleeding will not stop."
+
+## Timing Guidance
+- **Green:** Minor symptoms resolved; no ongoing concern.
+- **Yellow:** Concerning symptoms or injuries within the past 3 months; progressive deterioration; uncertain severity or timing.
+- **Red:** Life-threatening symptoms or injury at the time of writing, or within the past 2 weeks.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

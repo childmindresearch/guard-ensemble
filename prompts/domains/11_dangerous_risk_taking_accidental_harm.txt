@@ -1,0 +1,39 @@
+# Domain: Dangerous Risk-Taking or Accidental Harm
+
+Rate the entry for dangerous risk-taking or accidental harm. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Developmentally typical activity without a meaningful safety concern; past risk-taking that ended without indication of recurrence; writing while a passenger in a vehicle.
+
+**Examples:**
+- "I made an impulsive decision last year but have not repeated it."
+- "Writing this in the back seat on the way to my grandma's."
+
+### Yellow: Concern
+Escalating reckless driving, unsafe encounters, intentional exposure to hazards, or behavior showing markedly impaired judgment; interest in or planning of online challenges involving choking, ingestion, fire, heights, or traffic; current plan is concerning but not clearly underway.
+
+**Examples:**
+- "I keep driving much faster when I am upset."
+- "My friends and I are planning a dangerous challenge."
+
+### Red: Risk
+Dangerous behavior is underway or imminent; participant cannot or will not stop; activity has a substantial potential for serious injury or death, including any choking or "blackout" challenge; writing while driving.
+
+**Examples:**
+- "I am driving at a dangerous speed while writing this."
+- "I am about to attempt something that could seriously injure me."
+
+## Timing Guidance
+- **Green:** Past risk-taking ended without recurrence; writing while a passenger.
+- **Yellow:** Escalating or planned dangerous behavior within the past 3 months; plans concerning but not yet underway.
+- **Red:** Dangerous behavior underway at the time of writing, or imminent; writing while driving.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date
