@@ -63,7 +63,7 @@ class TestRunDomainPromptsBasic:
 
         results = run_domain_prompts(
             text="sample text", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller,
+            templates=templates, caller=caller, model_id="test-model",
         )
         assert "suicidality" in results
         assert "violence_harm_to_others" in results
@@ -76,7 +76,7 @@ class TestRunDomainPromptsBasic:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller,
+            templates=templates, caller=caller, model_id="test-model",
         )
         assert caller.call_count == 3
 
@@ -87,7 +87,7 @@ class TestRunDomainPromptsBasic:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=1,
+            templates=templates, caller=caller, model_id="test-model", runs=1,
         )
         assert caller.call_count == 1
 
@@ -101,7 +101,7 @@ class TestRunDomainPromptsBasic:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=2,
+            templates=templates, caller=caller, model_id="test-model", runs=2,
         )
         assert caller.call_count == 4
 
@@ -118,7 +118,7 @@ class TestRequestBody:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=1, temperature=0.7,
+            templates=templates, caller=caller, model_id="test-model", runs=1, temperature=0.7,
         )
         body = caller.call_args.kwargs["json"]
         assert body["temperature"] == 0.7
@@ -130,7 +130,7 @@ class TestRequestBody:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=1,
+            templates=templates, caller=caller, model_id="test-model", runs=1,
         )
         body = caller.call_args.kwargs["json"]
         assert body["max_tokens"] == CUSTOM_PROMPT_MAX_TOKENS
@@ -142,7 +142,7 @@ class TestRequestBody:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=1,
+            templates=templates, caller=caller, model_id="test-model", runs=1,
         )
         body = caller.call_args.kwargs["json"]
         assert body["chat_template_kwargs"]["enable_thinking"] is False
@@ -171,7 +171,7 @@ class TestRetry:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=1,
+            templates=templates, caller=caller, model_id="test-model", runs=1,
         )
         assert caller.call_count == 2
         assert results["suicidality"].tier == "green"
@@ -189,7 +189,7 @@ class TestRetry:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=1,
+            templates=templates, caller=caller, model_id="test-model", runs=1,
         )
         assert caller.call_count == 2  # initial + retry
         assert results["suicidality"].tier == TIER_UNKNOWN
@@ -208,7 +208,7 @@ class TestRetry:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=2,
+            templates=templates, caller=caller, model_id="test-model", runs=2,
         )
         assert call_count[0] == 4  # 2 runs * 2 attempts each
 
@@ -233,7 +233,7 @@ class TestFailureIsolation:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=3,
+            templates=templates, caller=caller, model_id="test-model", runs=3,
         )
         assert results["suicidality"].tier == "red"
         assert results["suicidality"].timing == "imminent"
@@ -248,7 +248,7 @@ class TestFailureIsolation:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=3,
+            templates=templates, caller=caller, model_id="test-model", runs=3,
         )
         assert results["suicidality"].tier == TIER_UNKNOWN
         assert len(results["suicidality"].errors) > 0
@@ -276,7 +276,7 @@ class TestSeverityMax:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=3,
+            templates=templates, caller=caller, model_id="test-model", runs=3,
         )
         assert results["suicidality"].tier == "red"
 
@@ -294,7 +294,7 @@ class TestSeverityMax:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=2,
+            templates=templates, caller=caller, model_id="test-model", runs=2,
         )
         assert results["suicidality"].tier == "yellow"
 
@@ -323,7 +323,7 @@ class TestFlagUnion:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=2,
+            templates=templates, caller=caller, model_id="test-model", runs=2,
         )
         flags = set(results["suicidality"].flags)
         assert "lethal_means_access" in flags
@@ -352,7 +352,7 @@ class TestTimingChoice:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=3,
+            templates=templates, caller=caller, model_id="test-model", runs=3,
         )
         assert results["suicidality"].timing == "imminent"
 
@@ -371,7 +371,7 @@ class TestTimingChoice:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=2,
+            templates=templates, caller=caller, model_id="test-model", runs=2,
         )
         assert results["suicidality"].timing == "imminent"
 
@@ -404,7 +404,7 @@ class TestEvidence:
 
         results = run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=2,
+            templates=templates, caller=caller, model_id="test-model", runs=2,
         )
         assert results["suicidality"].evidence == "red_evidence"
 
@@ -421,7 +421,7 @@ class TestCallerInjection:
 
         run_domain_prompts(
             text="t", age="25", entry_date="2024-01-01",
-            templates=templates, caller=caller, runs=3,
+            templates=templates, caller=caller, model_id="test-model", runs=3,
         )
         assert caller.call_count == 3
 
@@ -432,9 +432,80 @@ class TestCallerInjection:
 
         run_domain_prompts(
             text="hello", age="30", entry_date="2025-01-01",
-            templates=templates, caller=caller, runs=1,
+            templates=templates, caller=caller, model_id="test-model", runs=1,
         )
         call_args = caller.call_args
         assert call_args.args[0] == "http://localhost:12434/engines/v1/chat/completions"
         body = call_args.kwargs["json"]
         assert body["messages"][0]["content"] == "hello"
+
+
+# ---------------------------------------------------------------------------
+# Model ID in request body
+# ---------------------------------------------------------------------------
+
+class TestModelIdInBody:
+    def test_model_id_in_request_body(self):
+        """Request body must carry the supplied model_id."""
+        templates = {"suicidality": "$text"}
+        caller = mock.Mock(return_value=_mock_response())
+
+        run_domain_prompts(
+            text="t", age="25", entry_date="2024-01-01",
+            templates=templates, caller=caller, model_id="gpt-4", runs=1,
+        )
+        body = caller.call_args.kwargs["json"]
+        assert body["model"] == "gpt-4"
+
+    def test_model_id_preserved_on_retry(self):
+        """Retry path must use the same model_id as the initial call."""
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return _mock_empty_response()
+            return _mock_response()
+
+        templates = {"suicidality": "$text"}
+        caller = mock.Mock(side_effect=side_effect)
+
+        run_domain_prompts(
+            text="t", age="25", entry_date="2024-01-01",
+            templates=templates, caller=caller, model_id="claude-3", runs=1,
+        )
+        assert caller.call_count == 2
+        for call in caller.call_args_list:
+            assert call.kwargs["json"]["model"] == "claude-3"
+
+
+# ---------------------------------------------------------------------------
+# Empty model_id fails fast
+# ---------------------------------------------------------------------------
+
+class TestEmptyModelId:
+    def test_empty_model_id_raises_value_error(self):
+        """Blank model_id raises ValueError before any caller invocation."""
+        caller = mock.Mock()
+
+        with pytest.raises(ValueError, match="model_id is required"):
+            run_domain_prompts(
+                text="t", age="25", entry_date="2024-01-01",
+                templates={"suicidality": "$text"}, caller=caller,
+                model_id="",
+            )
+
+        assert caller.call_count == 0
+
+    def test_none_model_id_raises_value_error(self):
+        """None model_id raises ValueError before any caller invocation."""
+        caller = mock.Mock()
+
+        with pytest.raises(ValueError, match="model_id is required"):
+            run_domain_prompts(
+                text="t", age="25", entry_date="2024-01-01",
+                templates={"suicidality": "$text"}, caller=caller,
+                model_id=None,  # type: ignore
+            )
+
+        assert caller.call_count == 0

@@ -58,12 +58,14 @@ def _call_with_retry(
     prompt_text: str,
     caller: Callable,
     url: str,
+    model_id: str,
     temperature: float,
     max_tokens: int,
 ) -> str:
     """Call the LLM, retry once on empty/invalid content."""
     for attempt in range(2):
         body = {
+            "model": model_id,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "messages": [{"role": "user", "content": prompt_text}],
@@ -131,8 +133,8 @@ def run_domain_prompts(
     entry_date: str,
     templates: Dict[str, str],
     caller: Callable,
+    model_id: str,
     url: str = "http://localhost:12434/engines/v1/chat/completions",
-    model_id: str = "",
     runs: int = 3,
     temperature: float = 0.3,
 ) -> Dict[str, DomainPromptResult]:
@@ -147,13 +149,19 @@ def run_domain_prompts(
         caller: Injected callable for network I/O
                 (``caller(url, json=body) -> response``).
         url: Endpoint URL (defaulted for convenience).
-        model_id: Model identifier (passed in request body).
+        model_id: Model identifier (passed in request body). Required.
         runs: Number of independent runs per prompt.
         temperature: Sampling temperature.
 
     Returns:
         Dict mapping domain -> DomainPromptResult.
+
+    Raises:
+        ValueError: If model_id is empty or None.
     """
+    if not model_id:
+        raise ValueError("model_id is required")
+
     results: Dict[str, DomainPromptResult] = {}
 
     for domain, template in templates.items():
@@ -167,7 +175,7 @@ def run_domain_prompts(
         for _run_idx in range(runs):
             try:
                 raw = _call_with_retry(
-                    prompt_text, caller, url, temperature, CUSTOM_PROMPT_MAX_TOKENS
+                    prompt_text, caller, url, model_id, temperature, CUSTOM_PROMPT_MAX_TOKENS
                 )
                 parsed = parse_domain_response(raw)
                 parsed.domain = domain  # ensure domain is set
