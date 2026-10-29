@@ -11,10 +11,7 @@ from guards import (
     DELIBERATION_MODEL_ID,
     GUARDS,
     Guard,
-    RISK_LEVELS,
     _extract_verdict,
-    deliberation_build,
-    deliberation_parse,
     granite_guardian_parse,
     shieldgemma_aggregate,
     shieldgemma_parse,
@@ -205,54 +202,6 @@ class TestShieldGemmaAggregate:
 
 
 # ---------------------------------------------------------------------------
-# Deliberation parse tests
-# ---------------------------------------------------------------------------
-
-class TestDeliberationParse:
-    def test_high_risk_exact(self):
-        assert deliberation_parse("high_risk") == "high_risk"
-    def test_high_risk_case(self):
-        assert deliberation_parse("HIGH RISK") == "high_risk"
-    def test_high_risk_embedded(self):
-        assert deliberation_parse("The answer is high_risk") == "high_risk"
-    def test_concerning(self):
-        assert deliberation_parse("concerning") == "concerning"
-        assert deliberation_parse("CONCERNING") == "concerning"
-    def test_no_low_risk(self):
-        assert deliberation_parse("no_low_risk") == "no_low_risk"
-        assert deliberation_parse("no low risk") == "no_low_risk"
-        assert deliberation_parse("no_low_risk\nExplanation: benign") == "no_low_risk"
-    def test_raises_garbage(self):
-        with pytest.raises(ValueError):
-            deliberation_parse("blah blah nonsense")
-        with pytest.raises(ValueError):
-            deliberation_parse("")
-
-
-# ---------------------------------------------------------------------------
-# Deliberation build tests
-# ---------------------------------------------------------------------------
-
-class TestDeliberationBuild:
-    def test_includes_text(self):
-        prompt = deliberation_build("test input", {"llama_guard_label": "unsafe"})
-        assert "test input" in prompt
-    def test_includes_scores(self):
-        prompt = deliberation_build("test", {"llama_guard_label": "unsafe"})
-        assert "llama_guard_label" in prompt
-    def test_includes_risk_levels(self):
-        prompt = deliberation_build("test", {})
-        for level in RISK_LEVELS:
-            assert level in prompt
-    def test_empty_scores(self):
-        prompt = deliberation_build("test", {})
-        assert "none available" in prompt.lower()
-    def test_failed_guards_named(self):
-        prompt = deliberation_build("test", {"_guard_models_unavailable": "qwen_guard"})
-        assert "qwen_guard" in prompt
-
-
-# ---------------------------------------------------------------------------
 # Model ID canonical casing
 # ---------------------------------------------------------------------------
 
@@ -399,36 +348,6 @@ class TestGraniteGuardianParseRealistic:
 
 
 # ---------------------------------------------------------------------------
-# deliberation_parse on think-prefixed input
-# ---------------------------------------------------------------------------
-
-class TestDeliberationParseThinkPrefixed:
-    """deliberation_parse must succeed after stripping </antThinking> blocks."""
-
-    def test_think_prefixed_high_risk(self):
-        raw = "<antThinking>Analyzing the guard model scores... The entry shows clear violation.\n</antThinking>high_risk"
-        assert deliberation_parse(raw) == "high_risk"
-
-    def test_think_prefixed_concerning(self):
-        raw = "<antThinking>The signals are mixed, not clearly harmful.\n</antThinking>concerning"
-        assert deliberation_parse(raw) == "concerning"
-
-    def test_think_prefixed_no_low_risk(self):
-        raw = "<antThinking>Nothing dangerous detected.\n</antThinking>no_low_risk"
-        assert deliberation_parse(raw) == "no_low_risk"
-
-
-class TestDeliberationParseNoStdout:
-    """deliberation_parse must not print to stdout."""
-
-    def test_no_stdout_output(self, capsys):
-        deliberation_parse("high_risk")
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert captured.err == ""
-
-
-# ---------------------------------------------------------------------------
 # One success parse per guard — full coverage
 # ---------------------------------------------------------------------------
 
@@ -454,18 +373,6 @@ class TestAllGuardsSuccess:
         guard = GUARDS[3]
         r = guard.parse("Safety: Safe\nCategories: None")
         assert r["qwen_guard_unsafe"] == 0
-
-
-class TestDeliberationEmptyInput:
-    """deliberation_parse must raise ValueError mentioning empty input."""
-
-    def test_empty_string_raises_specific_error(self):
-        with pytest.raises(ValueError, match="empty input"):
-            deliberation_parse("")
-
-    def test_whitespace_only_raises_specific_error(self):
-        with pytest.raises(ValueError, match="empty input"):
-            deliberation_parse("   ")
 
 
 class TestDeliberationMaxTokensEnv:

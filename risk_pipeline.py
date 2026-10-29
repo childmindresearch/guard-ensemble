@@ -20,7 +20,6 @@ from guards import (
     DELIBERATION_MODEL_ID,
     DELIBERATION_PATH,
     GUARDS,
-    RISK_LEVELS,
     _shieldgemma_parse_all,
     shieldgemma_aggregate,
 )
@@ -892,7 +891,7 @@ def _summary(df: pd.DataFrame) -> None:
     # Final risk (legacy) distribution
     if "final_risk" in df.columns:
         counts = df["final_risk"].value_counts().to_dict()
-        parts = [f"{lvl}={counts.get(lvl, 0)}" for lvl in RISK_LEVELS]
+        parts = [f"{lvl}={counts.get(lvl, 0)}" for lvl in [to_legacy_risk(Tier.green), to_legacy_risk(Tier.yellow), to_legacy_risk(Tier.red)]]
         print(f"final_risk: {', '.join(parts)}")
 
     # Phase errors
