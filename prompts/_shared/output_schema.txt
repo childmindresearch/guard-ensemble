@@ -1,0 +1,23 @@
+# OUTPUT SCHEMA
+
+Respond with strict JSON only. Do not include prose, explanations, or formatting outside the JSON object.
+
+## Fields
+
+- **domain** (string): The domain slug being rated. Must match the file's domain name.
+- **tier** (string): One of "green", "yellow", or "red".
+- **timing** (string): One of "historical_resolved", "historical_unresolved", "recent", "current", "imminent", or "unclear".
+- **flags** (array of strings): Zero or more flags from the allowed list below. Do not invent flags.
+  - Escalation flags: "lethal_means_access", "current_intoxication", "alone_no_support"
+  - Minimum-rating flags: "minor_abuse_disclosure", "past_suicide_attempt", "past_self_harm", "past_sexual_assault", "past_psychosis", "past_eating_disorder"
+- **evidence** (string): Brief justification quoting or paraphrasing the entry text.
+
+## Example
+
+{
+  "domain": "suicidality",
+  "tier": "yellow",
+  "timing": "recent",
+  "flags": ["past_suicide_attempt"],
+  "evidence": "Participant states: \"I tried to kill myself two years ago.\""
+}

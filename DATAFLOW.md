@@ -1,16 +1,16 @@
 # Data Flow
 
-Text enters one row at a time. Each row is independently scored by four guardmodels, their verdicts are merged into a single record, and a deliberator model
-turns those verdicts into one final risk level. Nothing aborts on failure: every
-input row produces an output row.
+Text enters one row at a time. Each row is independently scored: guard fan-out, 21
+domain prompts (3 runs each), deterministic rule phases, then two LLM consolidation
+steps. Nothing aborts on failure — every input row produces an output row.
 
 ## Flow
 
 ```mermaid
 flowchart TD
-    subgraph S1["1 · Input"]
+    subgraph S1["1 · Input validation"]
         direction TB
-        A(["Input CSV with id + text<br/>or built-in demo texts"]) --> B["Build records<br/>one record per input text"]
+        A(["Input CSV with id, text, age, entry_date"]) --> B["Validate required columns<br/>and data types"]
     end
 
     subgraph S2["2 · Guard fan-out — every guard receives the same text"]
@@ -21,63 +21,66 @@ flowchart TD
         B --> G4["Qwen3Guard-Gen<br/>1 call"]
     end
 
-    subgraph S3["3 · Normalize and parse — applied to each guard response"]
+    subgraph S3["3 · Domain prompts — 21 domains, N runs each (default N=3)"]
         direction TB
-        G1 --> C
-        G2 --> C
-        G3 --> C
-        G4 --> C
-        C["strip_think: drop think blocks<br/>then parse the guard's own format"]
+        G1 --> D
+        G2 --> D
+        G3 --> D
+        G4 --> D
+        D["Per domain: render prompt with text, age, entry_date<br/>Run N times at temperature 0.3<br/>Aggregate: severity-max tier, timing tie-break, flag union"]
     end
 
-    C -->|"parsed"| R["Guard ratings<br/>label, unsafe flag, category"]
-    C -->|"parse fails"| E["Capture error<br/>guard_error = message<br/>errors = model:message"]
-
-    subgraph S4["4 · Row assembly"]
+    subgraph S4["4 · Deterministic rules"]
         direction TB
-        R --> M["Merge ratings into the row<br/>ShieldGemma: 4 policy verdicts collapse<br/>to 1 verdict, plus 4 per-policy flags"]
-        E --> M
-        M --> M2["Qwen Controversial is preserved,<br/>not folded into safe or unsafe"]
+        D --> R1["highest_tier: max known domain tier"]
+        R1 --> R2["escalation: Yellow->Red if escalation flags<br/>or multi-domain yellow"]
+        R2 --> R3["minimums: Yellow floor for minors+abuse<br/>or lifetime-history flags"]
+        R3 --> R4["unknown floor: Yellow if any domain unknown/empty<br/>emits floor_reasons (e.g. domain_unavailable)"]
+        R4 --> R5["floor_tier: max of all phases"]
     end
 
-    subgraph S5["5 · Deliberation"]
+    subgraph S5["5 · Consolidation — LLM with monotonic clamp"]
         direction TB
-        M2 --> D1["Collect rating columns<br/>excluding id, text, errors,<br/>deliberation_risk and any error column"]
-        D1 --> D2{"Any guard<br/>failed?"}
-        D2 -->|"yes"| D3["Add _guard_models_unavailable<br/>listing failed guards by name"]
-        D2 -->|"no"| D4["Build prompt:<br/>original text + guard ratings"]
-        D3 --> D4
-        D4 --> D5["Deliberation call<br/>1 per row"]
-        D5 --> D6{"Parse"}
-        D6 -->|"ok"| D7["Risk level:<br/>high_risk / concerning / no_low_risk"]
-        D6 -->|"fails"| D8["deliberation_risk =<br/>error: message"]
+        R5 --> C1["Build prompt: text + context + guards<br/>+ domains + rule results"]
+        C1 --> C2["Consolidation call<br/>1 per row, floor = floor_tier"]
     end
 
-    subgraph S6["6 · Delivery"]
+    subgraph S6["6 · Final update — LLM with monotonic clamp"]
         direction TB
-        D7 --> O1["Emit row:<br/>id, text, all guard columns,<br/>error columns, deliberation_risk"]
-        D8 --> O1
+        C2 --> F1["Build prompt: same blocks + consolidated tier"]
+        F1 --> F2["Final update call<br/>1 per row, floor = consolidated tier"]
+    end
+
+    subgraph S7["7 · Delivery"]
+        direction TB
+        F2 --> O1["Emit row: id, text, guard columns,<br/>domain_results JSON, tier columns,<br/>error columns"]
         O1 --> O2(["scores.csv<br/>one row per input text"])
-        O2 --> O3["Terminal summary<br/>flagged and error counts per guard,<br/>plus the risk-level distribution"]
+        O2 --> O3["Terminal summary<br/>flagged and error counts, tier distribution"]
     end
 ```
 
 ## Notes
 
-- **Seven guard calls per row.** ShieldGemma accounts for four of them, one per
-  policy, because it evaluates exactly one policy per request. The other three
-  guards take one call each. Deliberation adds one more.
-- **Three canonical outcomes.** The deliberator returns exactly one of
-  `high_risk`, `concerning`, or `no_low_risk`.
-- **`Controversial` is a real value.** Qwen3Guard can return `Controversial`. It
-  is preserved in `qwen_guard_label` and its `qwen_guard_unsafe` flag is `0`, so
-  it is never silently folded into safe or unsafe.
+- **72 calls per entry at defaults.** Guards contribute 7 (ShieldGemma = 4). Domain
+  prompts contribute 63 (21 domains × 3 runs). Consolidation and final update add
+  2 more. Retries on parse failure add further calls.
 - **Failures are data, not exceptions.** A guard that cannot be parsed writes its
-  message to its own `*_error` column and contributes to the `errors` column; it
-  is then named in `_guard_models_unavailable` so the deliberator knows the rating
-  is missing rather than negative. A deliberation failure is written in-cell as
-  `error: <message>`. The row is still emitted.
+  message to its `*_error` column. A domain-prompt run failure is recorded in
+  `custom_prompt_errors` and leaves that domain as `unknown`. Consolidation and
+  final-update failures fall back to the floor tier. The row is always emitted.
+- **14-day cross-entry rule is downstream.** The pipeline processes entries
+  independently. The rubric rule "same domain rated Yellow in 2+ entries within
+  14 days escalates to Red" must be applied after the pipeline, across all rows
+  for a given participant.
+- **Monotonic clamp.** Both consolidation and final update enforce monotonicity:
+  the LLM may raise the tier above the floor but never lower it. If the LLM
+  proposes a lower tier, the floor is used instead.
 - **Order of operations per row** is strictly serial: all guards are queried
-  before deliberation begins, so the deliberator always sees a complete set of
-  guard verdicts for that row.
-Two notes on the content. The -->|"parsed"| edge labels are quoted and pipe-free — pipes inside quoted node labels are a common Mermaid parse failure, so the risk levels use slashes instead. And I deliberately kept infrastructure out: the one-model-at-a-time reload that makes runs slow is real, but it affects latency, not the data, so it belongs in a different document.
+  before domain prompts begin; domain prompts complete before deterministic rules
+  run; deterministic rules complete before consolidation; consolidation completes
+  before final update.
+- **highest_domain_tier uses enum ordering.** Tier comparison uses the enum order green(0) < yellow(1) < red(2), not alphabetical string ordering. When no domains return a known tier, the column is `unknown`.
+- **domain_incomplete is honored from the custom-prompt stage.** If the custom-prompt stage fails or returns empty results, `domain_incomplete` is set to true before deterministic rules run. The unknown-floor phase then raises to Yellow.
+- **Three canonical tiers.** The system uses `green`, `yellow`, `red`. A legacy
+  column `final_risk` maps to `no_low_risk`, `concerning`, `high_risk` for
+  backward compatibility.

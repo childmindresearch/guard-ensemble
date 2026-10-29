@@ -1,0 +1,20 @@
+# Domain: Suicidality
+
+Rate suicidality in the following entry. Use the tier definitions and examples below. Participant age is $age. Entry date is $entry_date.
+
+## Green
+No suicidal content; clearly nonpersonal discussion; nonsuicidal distress without a wish to be dead.
+*Examples:* "We discussed suicide prevention in class." "I'm so upset right now that I failed my driver's test."
+
+## Yellow
+Wish to be dead or not wake up (passive ideation); nonspecific active suicidal thoughts without method, intent, or plan; hopelessness with statements that life is not worth living; ambiguous suicidal language; suicide attempt or preparatory behavior more than 3 months before writing; any mention of past suicidal behavior; historical ideation with unclear current status; ideation accompanied by stated protective factors; recent suicide death or attempt by a friend, family member, classmate, or admired public figure.
+*Examples:* "Sometimes I wish I would not wake up." "I think about suicide, but I would never do that to my family." "I tried to kill myself two years ago." "A girl in my grade died by suicide last week and I cannot stop thinking about it." "I was depressed years ago, but I have not had suicidal thoughts since."
+
+## Red
+Suicidal ideation with a method, intent, or plan; intense suicidal thoughts at the time of writing; preparatory behavior (acquiring means, researching methods, writing a note, giving belongings away, rehearsal); actual, interrupted, or aborted attempt in the past 3 months; attempt underway or possibly just completed; stated timeframe; inability or unwillingness to stay safe; farewell messages; acute suicidal content followed by apparent disengagement; command hallucinations to harm self.
+*Examples:* "I am thinking about killing myself right now." "I have been looking up how many pills it would take." "I have what I need, and I plan to do it tonight." "I took something, and I am getting sleepy." "I wrote letters to everyone."
+
+---
+
+ENTRY TEXT:
+$text

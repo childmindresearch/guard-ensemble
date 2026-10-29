@@ -1,0 +1,39 @@
+# Domain: Sexual Assault
+
+Rate the entry for sexual assault. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+General discussion without personal involvement.
+
+**Examples:**
+- "We talked about consent in class."
+
+### Yellow: Concern
+Any mention of sexual assault or unwanted sexual contact, current or historical, including assault described as resolved; uncertainty about consent because of intoxication, pressure, or age difference; pregnancy or infection concerns after an assault; any sexual contact between an adult and a participant under 18.
+
+**Examples:**
+- "Something happened at a party and I am not sure it was okay."
+- "He kept pushing until I gave in."
+- "I was raped last year."
+
+### Red: Risk
+Assault with injury; ongoing contact, threats, or access by the perpetrator (e.g., lives with the participant, at the same school); repeated or ongoing assault; assault co-occurring with suicidal content.
+
+**Examples:**
+- "He did it again last night and he lives with us."
+- "He said he would hurt me if I told."
+
+## Timing Guidance
+- **Green:** General educational discussion without personal involvement.
+- **Yellow:** Any disclosure, current or historical; assault within the past 2 weeks is treated as current.
+- **Red:** Assault is ongoing, or perpetrator access remains current; assault with injury.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

@@ -1,0 +1,42 @@
+# Domain: Eating-Disorder and Nutrition-Related Risk
+
+Rate the entry for eating-disorder or nutrition-related risk. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Body-image or eating concerns without dangerous behavior, severe restriction, acute symptoms, or deterioration.
+
+**Examples:**
+- "I wish I liked how I look in photos."
+
+### Yellow: Concern
+Active restriction; binge eating with loss of control; purging; compulsive exercise or exercise despite injury or illness; misuse of laxatives, diuretics, or diet pills; rapid or significant weight loss; missed or stopped periods; restriction or avoidance of foods out of fear or aversion (ARFID-type) with weight loss or inadequate intake; frequent or escalating behavior; dizziness, weakness, or fainting history; inability to eat or drink adequately; any mention of a past eating disorder, including one described as recovered; unclear degree of medical compromise.
+
+**Examples:**
+- "I have barely eaten this week."
+- "I have started purging most days."
+- "My period stopped a few months ago."
+- "I get dizzy whenever I stand."
+
+### Red: Risk
+Loss of consciousness; severe weakness or confusion; chest pain or a racing, very slow, or irregular heartbeat; inability to stand; inability to keep down fluids; serious dehydration; acute misuse of large amounts of laxatives, diuretics, diet pills, or other medication; current or repeated insulin omission to control weight; other signs of possible immediate medical compromise.
+
+**Examples:**
+- "I fainted and hit my head."
+- "My heart feels strange, and I cannot stand."
+- "I have not kept down fluids and am becoming confused."
+- "I have been skipping my insulin so I lose weight."
+
+## Timing Guidance
+- **Green:** Body-image or eating concerns without dangerous behavior, restriction, or acute symptoms.
+- **Yellow:** Active behaviors within the past 3 months; any mention of past eating disorder (even described as recovered); ongoing or recent restriction, purging, or medical compromise.
+- **Red:** Medical danger at the time of writing, or symptoms of acute medical compromise within the past 2 weeks.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

@@ -1,0 +1,38 @@
+# Domain: Severe Functional Incapacity
+
+Rate the entry for severe functional incapacity or inability to care for self. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Tier Definitions
+
+### Green: Okay
+Distress or impairment without inability to meet basic needs or maintain safety.
+
+**Examples:**
+- "I am overwhelmed and behind on schoolwork, but I am eating, sleeping, and taking care of myself."
+
+### Yellow: Concern
+Significant deterioration in eating, sleeping, hygiene, medication adherence, orientation, or ability to function; abruptly stopping prescribed psychiatric medication; prolonged isolation or not leaving home or attending school for weeks; inability to manage ordinary needs; unclear availability of support.
+
+**Examples:**
+- "I have barely gotten out of bed or eaten for several days."
+- "I keep forgetting where I am and cannot manage my medication."
+
+### Red: Risk
+Participant cannot maintain immediate basic safety; is severely confused, incapacitated, or unable to access food, fluids, shelter, medication, or help; dependent person has been left without necessary assistance.
+
+**Examples:**
+- "I cannot stand, get food, or contact anyone."
+- "I am alone and too confused to know where I am."
+
+## Timing Guidance
+- **Green:** Distress or impairment but basic needs and safety maintained.
+- **Yellow:** Significant functional deterioration within the past 3 months; prolonged isolation or inability to manage needs.
+- **Red:** Severe incapacity at the time of writing, or within the past 2 weeks.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

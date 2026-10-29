@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 import os
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
-from string import Template
 from typing import Callable, Union
 
 # ---------------------------------------------------------------------------
@@ -249,7 +246,7 @@ def qwen_guard_parse(raw: str, guard_name: str = "qwen_guard") -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Deliberation stage
+# Deliberation connection constants
 # ---------------------------------------------------------------------------
 
 DELIBERATION_MODEL_ID = "huggingface.co/qwen/qwen3-4b-gguf:Q8_0"
@@ -257,68 +254,6 @@ DELIBERATION_BASE_URL = os.environ.get("DELIBERATION_BASE_URL", DMR_BASE_URL)
 DELIBERATION_PATH = "/v1/chat/completions"
 DELIBERATION_MAX_TOKENS = int(os.environ.get("DELIBERATION_MAX_TOKENS", "2048"))
 DELIBERATION_DISABLE_THINKING = os.environ.get("DELIBERATION_DISABLE_THINKING", "1") == "1"
-
-RISK_LEVELS = ["high_risk", "concerning", "no_low_risk"]
-
-
-_REQUIRED_PLACEHOLDERS = {"text"}
-_KNOWN_PLACEHOLDERS = {"text", "scores_block"}
-
-
-@lru_cache(maxsize=4)
-def load_deliberation_prompt(path: str | None = None) -> str:
-    """Load and validate the deliberation prompt template from a file."""
-    if path is None:
-        path = str(Path(__file__).parent / "prompts" / "deliberator.txt")
-    with open(path, "r") as f:
-        content = f.read().rstrip("\n")
-    content = content.replace("ENTRY TEXT", "ENTRY TEXT:")
-    found = set(re.findall(r"\$(?!\$)([A-Za-z_]\w*)", content))
-    missing = _REQUIRED_PLACEHOLDERS - found
-    if missing:
-        for name in sorted(missing):
-            raise ValueError(f"prompt template missing placeholder: {name}")
-    unknown = found - _KNOWN_PLACEHOLDERS
-    if unknown:
-        for name in sorted(unknown):
-            raise ValueError(f"prompt template contains unknown placeholder: {name}")
-    return content
-
-
-def deliberation_build(text: str, guard_scores: dict, prompt: str | None = None) -> str:
-    """Build the deliberation prompt from the raw text plus guard model ratings."""
-    if prompt is None:
-        prompt = load_deliberation_prompt()
-    if guard_scores:
-        score_lines = "\n".join(f"- {k}: {v}" for k, v in guard_scores.items())
-        scores_block = f"Guard model ratings for this entry:\n{score_lines}"
-    else:
-        scores_block = (
-            "Guard model ratings for this entry: none available "
-            "(all guard models failed or were skipped). Judge from the text alone."
-        )
-    return Template(prompt).substitute(text=text, scores_block=scores_block)
-
-
-_DELIBERATION_RISK_RE = re.compile(
-    r"\b(high[_\s-]?risk|concerning|no[_\s-]?low[_\s-]?risk|no[_\s-]?risk|low[_\s-]?risk|safe)\b",
-    re.IGNORECASE,
-)
-
-
-def deliberation_parse(raw: str) -> str:
-    raw = strip_think(raw)
-    if not raw:
-        raise ValueError("deliberation parse failure: empty input")
-    m = _DELIBERATION_RISK_RE.search(raw)
-    if not m:
-        raise ValueError(f"deliberation parse failure: no risk level found in: {raw!r}")
-    token = m.group(1).lower().replace(" ", "_").replace("-", "_")
-    if token.startswith("high"):
-        return "high_risk"
-    if token == "concerning":
-        return "concerning"
-    return "no_low_risk"
 
 
 # ---------------------------------------------------------------------------
