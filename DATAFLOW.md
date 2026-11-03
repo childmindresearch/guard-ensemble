@@ -1,8 +1,9 @@
 # Data Flow
 
-Text enters one row at a time. Each row is independently scored: guard fan-out, 21
-domain prompts (3 runs each), deterministic rule phases, then two LLM consolidation
-steps. Nothing aborts on failure — every input row produces an output row.
+Text enters one row at a time. Each row is independently scored: guard fan-out, one
+Kev decision-model request (51 questions from YAML), deterministic rule phases,
+then two LLM consolidation steps. Nothing aborts on failure — every input row
+produces an output row.
 
 ## Flow
 
@@ -21,18 +22,18 @@ flowchart TD
         B --> G4["Qwen3Guard-Gen<br/>1 call"]
     end
 
-    subgraph S3["3 · Domain prompts — 21 domains, N runs each (default N=3)"]
+    subgraph S3["3 · Domain assessment — single Kev request, 51 questions from YAML"]
         direction TB
-        G1 --> D
-        G2 --> D
-        G3 --> D
-        G4 --> D
-        D["Per domain: render prompt with text, age, entry_date<br/>Run N times at temperature 0.3<br/>Aggregate: severity-max tier, timing tie-break, flag union"]
+        G1 --> K
+        G2 --> K
+        G3 --> K
+        G4 --> K
+        K["Load YAML from prompts/kev/<br/>Build 51 questions: 21 tier + 21 timing + 9 flags<br/>Single POST to Kev server<br/>Response parsed into domain_results, global_flags, flag_probabilities"]
     end
 
     subgraph S4["4 · Deterministic rules"]
         direction TB
-        D --> R1["highest_tier: max known domain tier"]
+        K --> R1["highest_tier: max known domain tier"]
         R1 --> R2["escalation: Yellow->Red if escalation flags<br/>or multi-domain yellow"]
         R2 --> R3["minimums: Yellow floor for minors+abuse<br/>or lifetime-history flags"]
         R3 --> R4["unknown floor: Yellow if any domain unknown/empty<br/>emits floor_reasons (e.g. domain_unavailable)"]
@@ -53,7 +54,7 @@ flowchart TD
 
     subgraph S7["7 · Delivery"]
         direction TB
-        F2 --> O1["Emit row: id, text, guard columns,<br/>domain_results JSON, tier columns,<br/>error columns"]
+        F2 --> O1["Emit row: id, text, guard columns,<br/>domain_results JSON, global_flags, global_flag_probabilities,<br/>tier columns, error columns"]
         O1 --> O2(["scores.csv<br/>one row per input text"])
         O2 --> O3["Terminal summary<br/>flagged and error counts, tier distribution"]
     end
@@ -61,13 +62,13 @@ flowchart TD
 
 ## Notes
 
-- **72 calls per entry at defaults.** Guards contribute 7 (ShieldGemma = 4). Domain
-  prompts contribute 63 (21 domains × 3 runs). Consolidation and final update add
-  2 more. Retries on parse failure add further calls.
+- **10 calls per entry.** Guards contribute 7 (ShieldGemma = 4). Kev domain
+  assessment contributes 1 (single request bundling 51 questions). Consolidation
+  and final update add 2 more. Retries on transient failures add further calls.
 - **Failures are data, not exceptions.** A guard that cannot be parsed writes its
-  message to its `*_error` column. A domain-prompt run failure is recorded in
-  `custom_prompt_errors` and leaves that domain as `unknown`. Consolidation and
-  final-update failures fall back to the floor tier. The row is always emitted.
+  message to its `*_error` column. A Kev request failure marks all domains as
+  `unknown` (all-or-nothing: there is no partial-domain fallback). Consolidation
+  and final-update failures fall back to the floor tier. The row is always emitted.
 - **14-day cross-entry rule is downstream.** The pipeline processes entries
   independently. The rubric rule "same domain rated Yellow in 2+ entries within
   14 days escalates to Red" must be applied after the pipeline, across all rows
@@ -76,11 +77,20 @@ flowchart TD
   the LLM may raise the tier above the floor but never lower it. If the LLM
   proposes a lower tier, the floor is used instead.
 - **Order of operations per row** is strictly serial: all guards are queried
-  before domain prompts begin; domain prompts complete before deterministic rules
+  before Kev domain assessment begins; Kev completes before deterministic rules
   run; deterministic rules complete before consolidation; consolidation completes
   before final update.
 - **highest_domain_tier uses enum ordering.** Tier comparison uses the enum order green(0) < yellow(1) < red(2), not alphabetical string ordering. When no domains return a known tier, the column is `unknown`.
-- **domain_incomplete is honored from the custom-prompt stage.** If the custom-prompt stage fails or returns empty results, `domain_incomplete` is set to true before deterministic rules run. The unknown-floor phase then raises to Yellow.
+- **domain_incomplete is honored from the Kev stage.** If the Kev stage fails or returns empty results, `domain_incomplete` is set to true before deterministic rules run. The unknown-floor phase then raises to Yellow.
 - **Three canonical tiers.** The system uses `green`, `yellow`, `red`. A legacy
   column `final_risk` maps to `no_low_risk`, `concerning`, `high_risk` for
   backward compatibility.
+- **YAML is the runtime source.** Domain questions are defined in YAML files under
+  `prompts/kev/` (`_shared.yaml` + 21 domain files). There is no compilation or
+  prompt-generation step — YAML is loaded and validated at runtime.
+- **Kev produces no free-text evidence.** The `domain_results` JSON contains
+  tier, timing, scores, probabilities, and confidence fields. Global flags are
+  emitted separately in `global_flags` and `global_flag_probabilities` columns.
+- **Kev confidence is calibrated model output.** The `tier_confidence` and
+  `timing_confidence` fields report the model's calibrated confidence. These are
+  not externally measured accuracy scores.

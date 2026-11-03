@@ -1,22 +1,22 @@
 # MSM Risk Detection Pipeline
 
-Five-stage risk pipeline: guard fan-out across four models, 21 domain prompts
-(3 runs each), deterministic rule phases, then two LLM consolidation steps.
-Results emitted as CSV.
+Five-stage risk pipeline: guard fan-out across four models, one Kev decision-model
+request per row (51 questions: 21 tier + 21 timing + 9 flags), deterministic rule
+phases, then two LLM consolidation steps. Results emitted as CSV.
 
 ## Architecture
 
 Five stages per input row:
 
 1. **Guard fan-out** — four guard models are called (serial HTTP calls to a single Docker Model Runner instance). Each model parses its response independently.
-2. **Domain prompts** — 21 risk-domain prompts are rendered and called N times each (default N=3). Results aggregate via severity-max tier, timing tie-break, and flag union.
+2. **Domain assessment (Kev)** — a single Kev request per row evaluates 51 questions (21 domain tiers, 21 domain timings, 9 global flags) built from YAML sources under `prompts/kev/`. There is no compilation or generation step — YAML is loaded at runtime.
 3. **Deterministic rules** — five phases run: highest domain tier, escalation (Yellow-to-Red modifiers), minimums (minor abuse, lifetime history), unknown-domain floor, and floor resolution.
 4. **Consolidation** — an LLM consolidates guard scores, domain tiers, and rule results into a single tier. Monotonic clamp enforces the floor tier.
 5. **Final update** — a second LLM pass may raise the tier further. Monotonic clamp enforces the consolidated tier as floor.
 
 Results are written as a single CSV row per input text.
 
-DMR hosts one resident model at a time. Each guard or LLM call triggers a model reload, which adds latency but keeps peak VRAM low.
+DMR hosts one resident model at a time. Each guard or LLM call triggers a model reload, which adds latency but keeps peak VRAM low. Kev runs on a separate local server.
 
 ## Models
 
@@ -29,6 +29,9 @@ All four guards plus the consolidation/final-update model are pulled as GGUF mod
 | Granite Guardian | `huggingface.co/ibm-granite/granite-guardian-3.3-8b-gguf:Q8_0` | Q8_0 | 8 B | Apache-2.0 |
 | Qwen3Guard | `huggingface.co/geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q4_K_M` | Q4_K_M | 8 B | Apache-2.0 |
 | Consolidation/Final | `huggingface.co/qwen/qwen3-4b-gguf:Q8_0` | Q8_0 | 4 B | Apache-2.0 |
+| Kev (domain) | `jaredpalmer/kev-4b` | — | 4 B | Apache-2.0 |
+
+Kev runs on a local server (not via DMR). Guards and consolidation/deliberation still use DMR or vLLM.
 
 ## Environment variables
 
@@ -43,7 +46,11 @@ All four guards plus the consolidation/final-update model are pulled as GGUF mod
 | `DELIBERATION_BASE_URL` | `$DMR_BASE_URL` | Override consolidation/final-update endpoint |
 | `DELIBERATION_MAX_TOKENS` | `2048` | Max tokens for consolidation/final-update responses |
 | `DELIBERATION_DISABLE_THINKING` | `1` | Disable thinking mode (set to `0` to enable) |
-| `CUSTOM_PROMPT_MAX_TOKENS` | `512` | Max tokens for domain-prompt responses |
+| `KEV_BASE_URL` | `http://127.0.0.1:8009` | Base URL for the Kev API server |
+| `KEV_MODEL` | `kev-latest` | Kev model ID |
+| `KEV_API_KEY` | *(none)* | Optional API key for the Kev server |
+| `KEV_TIMEOUT` | `600` | Kev request timeout in seconds |
+| `KEV_FLAG_THRESHOLD` | `0.5` | Probability threshold for flagging global flags |
 
 Per-guard `*_BASE_URL` overrides let you route individual models to separate inference servers while leaving the rest on DMR.
 
@@ -52,6 +59,13 @@ Per-guard `*_BASE_URL` overrides let you route individual models to separate inf
 - Python 3.10+
 - `pip install -r requirements.txt`
 - GPU with at least ~10 GiB VRAM (DMR loads one model at a time; peak VRAM stays ~10 GiB)
+- Local Kev server. Start with:
+
+  ```bash
+  python -m kev.serve --run jaredpalmer/kev-4b --port 8009
+  ```
+
+  Set `KEV_DATE_FACTS=1` to enable date-aware reasoning (recommended for timing questions).
 
 ## Gated models
 
@@ -83,33 +97,27 @@ bash serve.sh --kill
 | `--dry-run` | `false` | Print built prompts only, no network calls |
 | `--demo` | `false` | Use built-in demo texts (auto-enabled when `--input` is omitted) |
 | `--guards-only` | `false` | Run guards only, skip domain prompts through final update |
-| `--custom-prompts-dir` | `prompts/domains` | Directory for domain prompt files |
-| `--custom-runs` | `3` | Number of runs per domain prompt |
-| `--custom-temperature` | `0.3` | Temperature for custom-prompt calls |
+| `--kev-base-url` | *(env)* | Kev API base URL (overrides `KEV_BASE_URL`) |
+| `--kev-model` | *(env)* | Kev model ID (overrides `KEV_MODEL`) |
+| `--kev-timeout` | *(env)* | Kev request timeout in seconds |
+| `--kev-flag-threshold` | *(env)* | Threshold for flagging global flags |
+| `--kev-questions-dir` | `prompts/kev` | Directory for Kev question YAML files |
 | `--consolidation-prompt` | `prompts/consolidation.txt` | Path to custom consolidation prompt template |
 | `--final-update-prompt` | `prompts/final_update.txt` | Path to custom final-update prompt template |
 
 ## Prompt contracts
 
-### Domain prompts (`prompts/domains/*.txt`)
+### Domain prompts (Kev YAML under `prompts/kev/`)
 
-Each domain prompt file is a `string.Template` with placeholders `$text`, `$age`, `$entry_date`. At runtime the prelude (`prompts/_shared/rubric_prelude.txt`) is prepended and the output schema (`prompts/_shared/output_schema.txt`) is appended.
+The domain stage no longer renders per-domain text prompts or expects JSON output.
+Instead, YAML files under `prompts/kev/` are the runtime source:
 
-The model must respond with strict JSON:
+- **`prompts/kev/_shared.yaml`** — defines reading rules, shared timing criteria (6 levels: `historical_resolved`, `historical_unresolved`, `recent`, `current`, `imminent`, `unclear`), and 9 global flags (`lethal_means_access`, `current_intoxication`, `alone_no_support`, `minor_abuse_disclosure`, `past_suicide_attempt`, `past_self_harm`, `past_sexual_assault`, `past_psychosis`, `past_eating_disorder`).
+- **`prompts/kev/domains/*.yaml`** — one file per domain (21 total). Each defines a `tier` question (score type with 3 criteria: green/yellow/red) and optional `timing_guidance`.
 
-```json
-{
-  "domain": "suicidality",
-  "tier": "green",
-  "timing": "unclear",
-  "flags": [],
-  "evidence": "brief justification"
-}
-```
+At runtime the YAML is loaded, validated, and assembled into 51 questions (21 tier + 21 timing + 9 flags). A single Kev request posts all questions with the entry text, age, and date. There is no compilation or prompt-generation step — YAML is read directly.
 
-- **tier**: one of `green`, `yellow`, `red`.
-- **timing**: one of `historical_resolved`, `historical_unresolved`, `recent`, `current`, `imminent`, `unclear`.
-- **flags**: zero or more from the flag vocabulary (escalation flags: `lethal_means_access`, `current_intoxication`, `alone_no_support`; minimum flags: `minor_abuse_disclosure`, `past_suicide_attempt`, `past_self_harm`, `past_sexual_assault`, `past_psychosis`, `past_eating_disorder`).
+Kev does not produce free-text evidence. The `domain_results` JSON contains tier, timing, and probability/confidence fields only.
 
 ### Consolidation prompt (`prompts/consolidation.txt`)
 
@@ -164,7 +172,9 @@ python risk_pipeline.py --input texts.csv \
 | `qwen_guard_label` | `Safe`, `Unsafe`, or `Controversial` |
 | `qwen_guard_category` | Comma-separated categories, or `None` |
 | `<guard>_error` | Error message if that guard failed (one column per guard) |
-| `domain_results` | JSON object: per-domain tier, timing, flags, evidence |
+| `domain_results` | JSON object: per-domain `tier` (green/yellow/red/unknown), `timing`, `tier_score`, `tier_probabilities`, `tier_confidence`, `tier_mode_probability`, `timing_probabilities`, `timing_confidence`. No free-text evidence is included. |
+| `global_flags` | List of global flag dicts: `name`, `flagged` (bool), `probability` (float). |
+| `global_flag_probabilities` | Dict mapping flag name to probability value. |
 | `highest_domain_tier` | Highest tier among known domain ratings (uses enum ordering green < yellow < red, not string ordering). Set to `unknown` when no domains returned a tier. |
 | `escalated_tier` | Tier after escalation rules applied |
 | `escalation_reasons` | Comma-separated escalation triggers |
@@ -179,14 +189,14 @@ python risk_pipeline.py --input texts.csv \
 | `final_adjusted` | 1 if final-update tier was monotonic-clamped |
 | `final_risk` | Legacy label: `no_low_risk`, `concerning`, or `high_risk` |
 | `domain_incomplete` | 1 if any domain returned unknown |
-| `custom_prompt_errors` | Semicolon-joined domain-prompt error messages |
+| `custom_prompt_errors` | Semicolon-joined Kev error messages |
 | `consolidation_error` | Error from consolidation phase (empty on success) |
 | `final_update_error` | Error from final-update phase (empty on success) |
 | `errors` | Semicolon-joined `model:message` pairs for any failed guards |
 
 ## vLLM migration
 
-For production Linux deployments, replace DMR with per-model vLLM servers. No code changes are needed — set the five `*_BASE_URL` environment variables to point at the corresponding vLLM ports:
+For production Linux deployments, replace DMR with per-model vLLM servers for guards and deliberation. Kev runs on its own local server (not vLLM/DMR). Set the five `*_BASE_URL` environment variables to point at the corresponding vLLM ports:
 
 ```bash
 export SHIELDGEMMA_BASE_URL=http://localhost:8001/v1
@@ -205,11 +215,14 @@ Each vLLM server hosts a single model. Start them independently (e.g. via system
 - **Qwen3Guard quantization.** The `geoffmunn/Qwen3Guard-Gen-8B-GGUF:Q8_0` tag can resolve to `mostly_q2_k` instead of Q8_0. The pipeline pulls `:Q4_K_M` explicitly and gates on the reported quantization in `docker model list`.
 - **ShieldGemma costs 4 calls/text.** ShieldGemma evaluates one policy per request, and the pipeline queries all 4 policies (dangerous content, harassment, hate speech, sexually explicit) for every input.
 - **Qwen Controversial preserved.** The `Controversial` verdict is kept in `qwen_guard_label` and is not collapsed into safe/unsafe (the `_unsafe` flag is 0 for Controversial).
-- **Custom-prompt runtime.** The domain-prompt stage dominates runtime: 21 domains × N runs (default N=3) = 63 calls per entry. Each call reloads the model via DMR. Lower `--custom-runs` to reduce cost.
-- **JSON-column size.** The `domain_results` column stores a full JSON object per row (21 domains with tier, timing, flags, evidence). CSV row sizes can be large.
-- **Unknown-domain Yellow floor.** If any domain prompt fails (network error, parse failure), that domain is marked `unknown` and the deterministic floor phase raises to at least Yellow, emitting `domain_unavailable` in `floor_reasons`. This is conservative: uncertainty cannot be safely treated as low risk. The same floor applies when the custom-prompt stage returns empty results (all domains unavailable).
+- **Kev domain stage costs 1 call/text.** The domain assessment stage sends a single Kev request per entry (51 questions bundled). Total calls per entry are 10 (7 guards + 1 Kev + 2 deliberation).
+- **Kev request is all-or-nothing.** A single Kev request failure means all 21 domains go to `unknown`, the floor is raised to Yellow, and `domain_unavailable` is emitted in `floor_reasons`. There is no partial-domain fallback.
+- **Kev confidence is calibrated output, not measured accuracy.** The `tier_confidence` and `timing_confidence` fields report the model's calibrated confidence for each answer. These are not externally validated accuracy scores.
+- **JSON-column size.** The `domain_results` column stores a full JSON object per row (21 domains with tier, timing, scores, probabilities, and confidence). CSV row sizes can be large.
+- **Unknown-domain Yellow floor.** If any domain returns unknown (e.g., Kev request failure), the deterministic floor phase raises to at least Yellow, emitting `domain_unavailable` in `floor_reasons`. This is conservative: uncertainty cannot be safely treated as low risk. The same floor applies when the domain stage returns empty results.
 - **highest_domain_tier uses enum ordering.** Tier comparison uses green < yellow < red (enum order), not alphabetical string ordering. When no domains return a known tier, this column is set to `unknown`.
-- **Empty custom-prompt stage is not safe.** If the custom-prompt stage fails entirely (exception, empty domain results), `domain_incomplete` is set and the floor is raised to Yellow. An empty stage is never treated as safe coverage.
+- **Empty domain stage is not safe.** If the domain stage fails entirely (exception, empty domain results), `domain_incomplete` is set and the floor is raised to Yellow. An empty stage is never treated as safe coverage.
+- **KEV_DATE_FACTS recommendation.** Set `KEV_DATE_FACTS=1` when starting the Kev server to enable date-aware reasoning. This improves timing question accuracy by providing the model with current-date context.
 - **14-day cross-entry rule.** The rubric requires escalating a domain to Red if the same domain is Yellow in 2+ entries within 14 days for a participant. This rule is applied downstream (after the pipeline), across all rows — the pipeline processes entries independently.
 
 ## License
