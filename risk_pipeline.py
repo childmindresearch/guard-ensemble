@@ -40,6 +40,7 @@ from rules import (
     _unknown_floor,
 )
 from kev_client import (
+    KEV_FLAG_THRESHOLD,
     load_kev_questions,
     run_kev_domains,
 )
@@ -226,6 +227,7 @@ def run_guards(texts: List[str]) -> List[dict]:
 def run_kev_domain_stage(
     df: pd.DataFrame,
     keq: dict,
+    threshold: float | None = None,
 ) -> pd.DataFrame:
     """Run Kev domain assessment for each row.
 
@@ -249,6 +251,7 @@ def run_kev_domain_stage(
                 age=age,
                 entry_date=entry_date,
                 keq=keq,
+                threshold=threshold if threshold is not None else KEV_FLAG_THRESHOLD,
             )
 
             # Serialize domain results (no evidence, no per-domain flags)
@@ -719,6 +722,7 @@ def run(
     consolidation_prompt: Optional[str] = None,
     final_update_prompt: Optional[str] = None,
     guards_only: bool = False,
+    threshold: float | None = None,
 ) -> pd.DataFrame:
     """Run the full pipeline: guards -> Kev domains -> deterministic -> consolidation -> final -> CSV.
 
@@ -777,7 +781,7 @@ def run(
         return df
 
     # Stage 2: Kev domains
-    df = run_kev_domain_stage(df, keq=keq)
+    df = run_kev_domain_stage(df, keq=keq, threshold=threshold)
 
     # Stage 3: Deterministic phases
     df = run_deterministic_phases(df)
@@ -1011,6 +1015,7 @@ def main():
         consolidation_prompt=consolidation_prompt,
         final_update_prompt=final_update_prompt,
         guards_only=args.guards_only,
+        threshold=args.kev_flag_threshold,
     )
     _summary(df)
 

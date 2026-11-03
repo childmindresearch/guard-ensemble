@@ -16,10 +16,13 @@ from kev_client import (
     KEV_BASE_URL,
     KEV_API_KEY,
     TIER_NAMES,
+    TIMING_VOCABULARY,
+    FLAG_VOCABULARY,
     _decode_choice,
     _decode_noul,
     _decode_score,
     _post_kev,
+    _validate_shared,
     build_kev_questions,
     load_kev_questions,
     run_kev_domains,
@@ -76,7 +79,30 @@ class TestLoadKevQuestions:
 
     def test_empty_directory_raises(self, tmp_path: Path) -> None:
         (tmp_path / "domains").mkdir()
-        (tmp_path / "_shared.yaml").write_text("reading_rules: rules\ntiming: {type: choice, instructions: i, criteria: {}}\nflags: {}")
+        shared_yaml = (
+            "reading_rules: rules\n"
+            "timing:\n"
+            "  type: choice\n"
+            "  instructions: i\n"
+            "  criteria:\n"
+            "    historical_resolved: a\n"
+            "    historical_unresolved: b\n"
+            "    recent: c\n"
+            "    current: d\n"
+            "    imminent: e\n"
+            "    unclear: f\n"
+            "flags:\n"
+            "  lethal_means_access: {type: noul, instructions: i}\n"
+            "  current_intoxication: {type: noul, instructions: i}\n"
+            "  alone_no_support: {type: noul, instructions: i}\n"
+            "  minor_abuse_disclosure: {type: noul, instructions: i}\n"
+            "  past_suicide_attempt: {type: noul, instructions: i}\n"
+            "  past_self_harm: {type: noul, instructions: i}\n"
+            "  past_sexual_assault: {type: noul, instructions: i}\n"
+            "  past_psychosis: {type: noul, instructions: i}\n"
+            "  past_eating_disorder: {type: noul, instructions: i}\n"
+        )
+        (tmp_path / "_shared.yaml").write_text(shared_yaml)
         with patch("kev_client.KEV_DIR", tmp_path):
             with pytest.raises(ValueError, match="No domain YAML"):
                 load_kev_questions()
@@ -174,13 +200,14 @@ class TestDecodeChoice:
         answer = {"choice": "recent", "probabilities": {"recent": 0.8}, "confidence": 0.9}
         result = _decode_choice(answer)
         assert result["timing"] == "recent"
-        assert result["confidence"] == 0.9
+        assert result["timing_confidence"] == 0.9
+        assert result["timing_probabilities"] == {"recent": 0.8}
 
     def test_minimal_choice(self) -> None:
         answer = {}
         result = _decode_choice(answer)
         assert result["timing"] is None
-        assert result["probabilities"] == {}
+        assert result["timing_probabilities"] == {}
 
 
 # ── Noul decoder tests ────────────────────────────────────────────────────────
@@ -364,3 +391,224 @@ class TestRunKevDomains:
         assert "past_eating_disorder" in flagged_names
         assert "current_intoxication" not in flagged_names
         assert "minor_abuse_disclosure" not in flagged_names
+
+    def test_flag_threshold_override(self, keq: dict) -> None:
+        """CLI --kev-flag-threshold should reach the decoder via run_kev_domains."""
+        domain_slugs = [d["domain"] for d in keq["domains"]]
+        flag_probs = {
+            "lethal_means_access": 0.7,
+            "current_intoxication": 0.3,
+            "alone_no_support": 0.5,
+            "minor_abuse_disclosure": 0.1,
+            "past_suicide_attempt": 0.0,
+            "past_self_harm": 0.9,
+            "past_sexual_assault": 0.2,
+            "past_psychosis": 0.4,
+            "past_eating_disorder": 0.6,
+        }
+        mock_resp = self._mock_resp(domain_slugs, flag_probs)
+
+        # With threshold=0.6, only flags >= 0.6 should fire
+        with patch("kev_client._post_kev", return_value=mock_resp):
+            result = run_kev_domains(SAMPLE_TEXT, SAMPLE_AGE, SAMPLE_DATE, keq, threshold=0.6)
+
+        flagged_names = [f["name"] for f in result["global_flags"] if f["flagged"]]
+        assert "lethal_means_access" in flagged_names  # 0.7 >= 0.6
+        assert "past_self_harm" in flagged_names       # 0.9 >= 0.6
+        assert "past_eating_disorder" in flagged_names  # 0.6 >= 0.6
+        assert "alone_no_support" not in flagged_names   # 0.5 < 0.6
+
+    def test_domain_result_has_separate_tier_and_timing_keys(self, keq: dict) -> None:
+        """Domain results should have tier_probabilities/confidence separate from timing_probabilities/confidence."""
+        domain_slugs = [d["domain"] for d in keq["domains"]]
+        flag_probs = {name: 0.0 for name in keq["flags"]}
+        mock_resp = self._mock_resp(domain_slugs, flag_probs)
+
+        with patch("kev_client._post_kev", return_value=mock_resp):
+            result = run_kev_domains(SAMPLE_TEXT, SAMPLE_AGE, SAMPLE_DATE, keq)
+
+        for domain_data in result["domains"].values():
+            # Tier keys should exist and hold tier data
+            assert domain_data["tier"] == "green"
+            assert domain_data["probabilities"] == {"0": 0.9, "1": 0.08, "2": 0.02}
+            assert domain_data["confidence"] == 0.95
+            # Timing keys should exist and hold timing data
+            assert domain_data["timing"] == "recent"
+            assert domain_data["timing_probabilities"] == {"recent": 0.8}
+            assert domain_data["timing_confidence"] == 0.9
+
+
+# ── Vocabulary validation tests ──────────────────────────────────────────────
+
+
+class TestValidateSharedVocabulary:
+
+    def test_extra_timing_key_rejected(self, tmp_path: Path) -> None:
+        shared = {
+            "reading_rules": "rules",
+            "timing": {
+                "type": "choice",
+                "instructions": "i",
+                "criteria": {
+                    "historical_resolved": "a",
+                    "historical_unresolved": "b",
+                    "recent": "c",
+                    "current": "d",
+                    "imminent": "e",
+                    "unclear": "f",
+                    "extra": "g",
+                },
+            },
+            "flags": {
+                name: {"type": "noul", "instructions": "i"}
+                for name in FLAG_VOCABULARY
+            },
+        }
+        with pytest.raises(ValueError, match="timing criteria keys"):
+            _validate_shared(shared)
+
+    def test_missing_timing_key_rejected(self, tmp_path: Path) -> None:
+        shared = {
+            "reading_rules": "rules",
+            "timing": {
+                "type": "choice",
+                "instructions": "i",
+                "criteria": {
+                    "historical_resolved": "a",
+                    "historical_unresolved": "b",
+                    "recent": "c",
+                    "current": "d",
+                    "imminent": "e",
+                },
+            },
+            "flags": {
+                name: {"type": "noul", "instructions": "i"}
+                for name in FLAG_VOCABULARY
+            },
+        }
+        with pytest.raises(ValueError, match="timing criteria keys"):
+            _validate_shared(shared)
+
+    def test_extra_flag_rejected(self, tmp_path: Path) -> None:
+        flags = {
+            name: {"type": "noul", "instructions": "i"}
+            for name in FLAG_VOCABULARY
+        }
+        flags["extra_flag"] = {"type": "noul", "instructions": "i"}
+        shared = {
+            "reading_rules": "rules",
+            "timing": {
+                "type": "choice",
+                "instructions": "i",
+                "criteria": {
+                    key: "desc" for key in TIMING_VOCABULARY
+                },
+            },
+            "flags": flags,
+        }
+        with pytest.raises(ValueError, match="flag keys"):
+            _validate_shared(shared)
+
+    def test_missing_flag_rejected(self, tmp_path: Path) -> None:
+        flags = {
+            name: {"type": "noul", "instructions": "i"}
+            for name in FLAG_VOCABULARY
+        }
+        del flags["past_eating_disorder"]
+        shared = {
+            "reading_rules": "rules",
+            "timing": {
+                "type": "choice",
+                "instructions": "i",
+                "criteria": {
+                    key: "desc" for key in TIMING_VOCABULARY
+                },
+            },
+            "flags": flags,
+        }
+        with pytest.raises(ValueError, match="flag keys"):
+            _validate_shared(shared)
+
+    def test_valid_vocabulary_accepted(self) -> None:
+        shared = {
+            "reading_rules": "rules",
+            "timing": {
+                "type": "choice",
+                "instructions": "i",
+                "criteria": {
+                    key: "desc" for key in TIMING_VOCABULARY
+                },
+            },
+            "flags": {
+                name: {"type": "noul", "instructions": "i"}
+                for name in FLAG_VOCABULARY
+            },
+        }
+        _validate_shared(shared)  # should not raise
+
+
+# ── Error recording tests ────────────────────────────────────────────────────
+
+
+class TestDecodeScoreErrorRecording:
+
+    def test_empty_probabilities_records_error(self) -> None:
+        errors: list[str] = []
+        result = _decode_score({"score": 1.0, "probabilities": {}}, errors=errors)
+        assert result["tier"] == "unknown"
+        assert len(errors) == 1
+        assert "Malformed score probabilities" in errors[0]
+
+    def test_missing_probabilities_key_records_error(self) -> None:
+        errors: list[str] = []
+        result = _decode_score({"score": 1.0}, errors=errors)
+        assert result["tier"] == "unknown"
+        assert len(errors) == 1
+
+    def test_valid_probabilities_no_error(self) -> None:
+        errors: list[str] = []
+        result = _decode_score(
+            {"score": 0.5, "probabilities": {"0": 0.9, "1": 0.08, "2": 0.02}},
+            errors=errors,
+        )
+        assert result["tier"] == "green"
+        assert len(errors) == 0
+
+    def test_no_errors_list_no_side_effect(self) -> None:
+        # When errors is not passed, no side effects
+        result = _decode_score({"score": 1.0, "probabilities": {}})
+        assert result["tier"] == "unknown"
+
+
+# ── Threshold override tests ─────────────────────────────────────────────────
+
+
+class TestDecodeNoulThresholdOverride:
+
+    def test_explicit_threshold(self) -> None:
+        result = _decode_noul({"noul": 0.3}, threshold=0.2)
+        assert result["flagged"] is True
+
+    def test_explicit_threshold_below(self) -> None:
+        result = _decode_noul({"noul": 0.3}, threshold=0.5)
+        assert result["flagged"] is False
+
+    def test_none_threshold_uses_default(self) -> None:
+        result = _decode_noul({"noul": 0.8}, threshold=None)
+        assert result["flagged"] is True
+
+    def test_decode_choice_returns_timing_prefixed_keys(self) -> None:
+        answer = {
+            "choice": "recent",
+            "probabilities": {"recent": 0.8},
+            "confidence": 0.9,
+        }
+        result = _decode_choice(answer)
+        assert result["timing"] == "recent"
+        assert "timing_probabilities" in result
+        assert "timing_confidence" in result
+        assert result["timing_probabilities"] == {"recent": 0.8}
+        assert result["timing_confidence"] == 0.9
+        # Should NOT have bare 'probabilities' or 'confidence'
+        assert "probabilities" not in result
+        assert "confidence" not in result

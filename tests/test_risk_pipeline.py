@@ -934,3 +934,59 @@ class TestKeDomainStage:
 
         assert result["domain_incomplete"].iloc[0] == True
         assert "connection refused" in result["custom_prompt_errors"].iloc[0]
+
+    def test_threshold_override_via_run_kev_domain_stage(self):
+        """run_kev_domain_stage forwards threshold to run_kev_domains."""
+        df = pd.DataFrame([{"id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01"}])
+
+        captured = {}
+
+        def fake_run_kev_domains(text, age, entry_date, keq, threshold):
+            captured["threshold"] = threshold
+            return {
+                "domains": {
+                    "suicidality": {
+                        "tier": "green", "timing": "unclear", "mean_score": 0.1,
+                        "probabilities": {"0": 0.9, "1": 0.09, "2": 0.01},
+                        "confidence": 0.95, "mode_probability": 0.9,
+                        "timing_probabilities": {"unclear": 0.9},
+                        "timing_confidence": 0.9,
+                    }
+                },
+                "errors": [],
+                "global_flags": [{"name": "lethal_means_access", "flagged": False, "probability": 0.1}],
+                "flag_probabilities": {"lethal_means_access": 0.1},
+            }
+
+        with mock.patch("risk_pipeline.run_kev_domains", side_effect=fake_run_kev_domains):
+            run_kev_domain_stage(df, keq=self._fake_keq(), threshold=0.75)
+
+        assert captured["threshold"] == 0.75
+
+    def test_threshold_zero_is_not_treated_as_unset(self):
+        """threshold=0.0 must not fall back to KEV_FLAG_THRESHOLD."""
+        df = pd.DataFrame([{"id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01"}])
+
+        captured = {}
+
+        def fake_run_kev_domains(text, age, entry_date, keq, threshold):
+            captured["threshold"] = threshold
+            return {
+                "domains": {
+                    "suicidality": {
+                        "tier": "green", "timing": "unclear", "mean_score": 0.1,
+                        "probabilities": {"0": 0.9, "1": 0.09, "2": 0.01},
+                        "confidence": 0.95, "mode_probability": 0.9,
+                        "timing_probabilities": {"unclear": 0.9},
+                        "timing_confidence": 0.9,
+                    }
+                },
+                "errors": [],
+                "global_flags": [{"name": "lethal_means_access", "flagged": False, "probability": 0.1}],
+                "flag_probabilities": {"lethal_means_access": 0.1},
+            }
+
+        with mock.patch("risk_pipeline.run_kev_domains", side_effect=fake_run_kev_domains):
+            run_kev_domain_stage(df, keq=self._fake_keq(), threshold=0.0)
+
+        assert captured["threshold"] == 0.0

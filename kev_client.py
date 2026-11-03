@@ -37,6 +37,28 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+TIMING_VOCABULARY = frozenset({
+    "historical_resolved",
+    "historical_unresolved",
+    "recent",
+    "current",
+    "imminent",
+    "unclear",
+})
+
+FLAG_VOCABULARY = frozenset({
+    "lethal_means_access",
+    "current_intoxication",
+    "alone_no_support",
+    "minor_abuse_disclosure",
+    "past_suicide_attempt",
+    "past_self_harm",
+    "past_sexual_assault",
+    "past_psychosis",
+    "past_eating_disorder",
+})
+
+
 def _validate_shared(shared: dict[str, Any]) -> None:
     """Validate shared YAML has all required keys."""
     for key in ("reading_rules", "timing", "flags"):
@@ -53,9 +75,21 @@ def _validate_shared(shared: dict[str, Any]) -> None:
         raise ValueError("Shared timing missing 'instructions'")
     if "criteria" not in timing or not isinstance(timing["criteria"], dict):
         raise ValueError("Shared timing must have a 'criteria' dict")
+    timing_keys = set(timing["criteria"].keys())
+    if timing_keys != TIMING_VOCABULARY:
+        raise ValueError(
+            f"Shared timing criteria keys must equal the expected 6 timing vocabulary. "
+            f"Got {sorted(timing_keys)}, expected {sorted(TIMING_VOCABULARY)}"
+        )
     flags = shared["flags"]
     if not isinstance(flags, dict):
         raise ValueError("Shared flags must be a mapping")
+    flag_keys = set(flags.keys())
+    if flag_keys != FLAG_VOCABULARY:
+        raise ValueError(
+            f"Shared flag keys must equal the expected 9 flags. "
+            f"Got {sorted(flag_keys)}, expected {sorted(FLAG_VOCABULARY)}"
+        )
     for fname, fdef in flags.items():
         if not isinstance(fdef, dict):
             raise ValueError(f"Flag '{fname}' must be a mapping")
@@ -214,10 +248,12 @@ def _post_kev(payload: dict[str, Any], *, max_retries: int = 1) -> dict[str, Any
 # ── Response parser ───────────────────────────────────────────────────────────
 
 
-def _decode_score(answer: dict[str, Any]) -> dict[str, Any]:
+def _decode_score(answer: dict[str, Any], errors: list[str] | None = None) -> dict[str, Any]:
     """Decode a score-type answer into tier name, mean, probabilities, etc."""
     probabilities = answer.get("probabilities", {})
     if not probabilities:
+        if errors is not None:
+            errors.append("Malformed score probabilities: empty or missing")
         return {
             "tier": "unknown",
             "mean_score": None,
@@ -256,13 +292,15 @@ def _decode_choice(answer: dict[str, Any]) -> dict[str, Any]:
     probabilities = answer.get("probabilities", {})
     return {
         "timing": answer.get("choice"),
-        "probabilities": probabilities,
-        "confidence": answer.get("confidence"),
+        "timing_probabilities": probabilities,
+        "timing_confidence": answer.get("confidence"),
     }
 
 
-def _decode_noul(answer: dict[str, Any], threshold: float = KEV_FLAG_THRESHOLD) -> dict[str, Any]:
+def _decode_noul(answer: dict[str, Any], threshold: float | None = None) -> dict[str, Any]:
     """Decode a noul-type answer, applying the threshold."""
+    if threshold is None:
+        threshold = KEV_FLAG_THRESHOLD
     prob = answer.get("noul")
     return {
         "flagged": prob is not None and prob >= threshold,
@@ -278,6 +316,7 @@ def run_kev_domains(
     age: int,
     entry_date: str,
     keq: dict[str, Any],
+    threshold: float | None = None,
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """Run a single Kev request covering all domains, timing, and flags.
@@ -336,7 +375,7 @@ def run_kev_domains(
             domain_result["tier"] = "unknown"
             errors.append(f"Missing or malformed tier answer for domain '{slug}'")
         else:
-            domain_result.update(_decode_score(tier_ans))
+            domain_result.update(_decode_score(tier_ans, errors=errors))
 
         # Timing
         timing_ans = answers.get(f"{slug}__timing")
@@ -356,7 +395,7 @@ def run_kev_domains(
             global_flags.append({"name": flag_name, "flagged": False, "probability": None})
             flag_probabilities[flag_name] = -1.0
         else:
-            decoded = _decode_noul(flag_ans)
+            decoded = _decode_noul(flag_ans, threshold=threshold)
             global_flags.append({
                 "name": flag_name,
                 "flagged": decoded["flagged"],
