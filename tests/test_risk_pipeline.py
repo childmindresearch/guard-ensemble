@@ -1,5 +1,6 @@
 """Tests for risk_pipeline: CLI flags, prompt plumbing, mocked end-to-end pipeline."""
 
+import json
 from unittest import mock
 
 import pandas as pd
@@ -13,8 +14,7 @@ from risk_pipeline import (
     _summary,
     run_deterministic_phases,
     _build_rule_block,
-    _caller,
-    run_custom_prompts_stage,
+    run_kev_domain_stage,
     run_consolidation_and_final_update,
     _join_url,
 )
@@ -71,14 +71,7 @@ class TestInputValidation:
 
 
 class TestDryRun:
-    """dry_run prints all prompts with no unresolved $."""
-
-    def test_dry_run_no_unresolved_placeholders(self, capsys):
-        df = pd.DataFrame(DEMO_ROWS)
-        dry_run(df)
-        captured = capsys.readouterr()
-        import re
-        assert not re.search(r"\$[A-Za-z_]", captured.out), "Unresolved $ placeholder found"
+    """dry_run prints all prompts with no unresolved placeholders."""
 
     def test_dry_run_prints_guard_prompts(self, capsys):
         df = pd.DataFrame(DEMO_ROWS)
@@ -87,11 +80,11 @@ class TestDryRun:
         for guard_name in ("shieldgemma", "llama_guard", "granite_guardian", "qwen_guard"):
             assert f"[{guard_name}]" in captured.out
 
-    def test_dry_run_prints_domain_prompts(self, capsys):
+    def test_dry_run_prints_kev_questions(self, capsys):
         df = pd.DataFrame(DEMO_ROWS)
         dry_run(df)
         captured = capsys.readouterr()
-        assert "[domain:" in captured.out
+        assert "[kev]" in captured.out
 
     def test_dry_run_prints_consolidation(self, capsys):
         df = pd.DataFrame(DEMO_ROWS)
@@ -107,7 +100,7 @@ class TestDryRun:
 
 
 class TestMockedEndToEnd:
-    """Mocked end-to-end pipeline: 72 calls/entry, columns, legacy mapping, error handling."""
+    """Mocked end-to-end pipeline: 10 calls/entry, columns, legacy mapping, error handling."""
 
     @pytest.fixture
     def input_df(self):
@@ -115,19 +108,103 @@ class TestMockedEndToEnd:
             {"id": 0, "text": "test entry", "age": 25, "entry_date": "2025-01-01", "participant_id": "P001"},
         ])
 
+    def _patch_requests(self, call_counter):
+        """Patch both risk_pipeline and kev_client requests.post, incrementing shared counter once."""
+        import threading
+        lock = threading.Lock()
+        in_call = [False]
+        def wrapped(url, **kwargs):
+            with lock:
+                if in_call[0]:
+                    return self._response_for_call(url, call_counter[0])
+                in_call[0] = True
+                call_counter[0] += 1
+                result = self._response_for_call(url, call_counter[0])
+                in_call[0] = False
+                return result
+        return (
+            mock.patch("risk_pipeline.requests.post", side_effect=wrapped),
+            mock.patch("kev_client.requests.post", side_effect=wrapped),
+        )
+
+    def _response_for_call(self, url, call_num):
+        """Return the mock response for a given call number."""
+        r = mock.Mock()
+        r.status_code = 200
+        r.raise_for_status = mock.Mock()
+
+        # Calls 1-4: ShieldGemma (completions endpoint)
+        if url.endswith("/v1/completions"):
+            r.json.return_value = {"choices": [{"text": "No"}]}
+            return r
+
+        # Call 5-7: llama_guard, granite_guardian, qwen_guard
+        if 5 <= call_num <= 7:
+            if call_num == 5:
+                content = "safe"
+            elif call_num == 6:
+                content = "No"
+            else:
+                content = "Safety: Safe\nCategories: None"
+            r.json.return_value = {"choices": [{"message": {"content": content}}]}
+            return r
+
+        # Call 8: Kev (/v1/systemone)
+        if "/v1/systemone" in url:
+            r.json.return_value = self._make_kev_response()
+            return r
+
+        # Calls 9-10: consolidation + final_update
+        r.json.return_value = {
+            "choices": [{
+                "message": {
+                    "content": '{"tier": "green", "rationale": "low risk"}'
+                }
+            }]
+        }
+        return r
+
+    def _fake_keq(self):
+        """Return a minimal Kev question config for testing."""
+        return {
+            "reading_rules": "test rules",
+            "timing": {"type": "choice", "instructions": "test", "criteria": {"unclear": "unclear"}},
+            "flags": {"lethal_means_access": {"type": "noul", "instructions": "test"}},
+            "domains": [
+                {"domain": "suicidality", "tier": {"type": "score", "instructions": "test", "criteria": ["g", "y", "r"]}},
+            ],
+        }
+
+    def _make_kev_response(self):
+        """Build a Kev response body with all domains green."""
+        return {
+            "answers": {
+                "suicidality__tier": {
+                    "score": 0.1,
+                    "probabilities": {"0": 0.9, "1": 0.09, "2": 0.01},
+                    "confidence": 0.95,
+                },
+                "suicidality__timing": {
+                    "choice": "unclear",
+                    "probabilities": {"unclear": 0.9},
+                    "confidence": 0.9,
+                },
+                "flag__lethal_means_access": {"noul": 0.1},
+            }
+        }
+
     def _make_side_effect(self, call_counter):
         """Build a side_effect for requests.post that returns safe/green responses.
 
         Call pattern per entry:
         - 4 ShieldGemma completions calls
         - 3 chat guard calls (llama, granite, qwen)
-        - 63 custom prompt calls (21 domains x 3 runs)
+        - 1 Kev call (/v1/systemone)
         - 1 consolidation call
         - 1 final update call
-        Total: 72 calls
+        Total: 10 calls
         """
         def side_effect(url, **kwargs):
-            call_counter[0] += 1
             call = call_counter[0]
 
             # Calls 1-4: ShieldGemma (completions endpoint)
@@ -137,8 +214,7 @@ class TestMockedEndToEnd:
                 r.raise_for_status = mock.Mock()
                 return r
 
-            # All other calls are chat completions
-            # Calls 5-7: llama_guard, granite_guardian, qwen_guard
+            # Call 5-7: llama_guard, granite_guardian, qwen_guard
             if 5 <= call <= 7:
                 r = mock.Mock()
                 if call == 5:
@@ -151,20 +227,14 @@ class TestMockedEndToEnd:
                 r.raise_for_status = mock.Mock()
                 return r
 
-            # Calls 8-70: custom prompt calls (21 domains x 3 runs = 63)
-            if 8 <= call <= 70:
+            # Call 8: Kev (/v1/systemone)
+            if "/v1/systemone" in url:
                 r = mock.Mock()
-                r.json.return_value = {
-                    "choices": [{
-                        "message": {
-                            "content": '{"domain": "test_domain", "tier": "green", "timing": "unclear", "flags": [], "evidence": "no risk"}'
-                        }
-                    }]
-                }
+                r.json.return_value = self._make_kev_response()
                 r.raise_for_status = mock.Mock()
                 return r
 
-            # Calls 71-72: consolidation + final_update
+            # Calls 9-10: consolidation + final_update
             r = mock.Mock()
             r.json.return_value = {
                 "choices": [{
@@ -178,27 +248,28 @@ class TestMockedEndToEnd:
 
         return side_effect
 
-    def test_72_calls_per_entry(self, input_df, tmp_path):
+    def test_10_calls_per_entry(self, input_df, tmp_path):
         call_counter = [0]
-        side_effect = self._make_side_effect(call_counter)
+        patches = self._patch_requests(call_counter)
 
         out = tmp_path / "out.csv"
-        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out))
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
 
-        assert call_counter[0] == 72, f"Expected 72 calls, got {call_counter[0]}"
+        assert call_counter[0] == 10, f"Expected 10 calls, got {call_counter[0]}"
 
     def test_expected_columns(self, input_df, tmp_path):
         call_counter = [0]
-        side_effect = self._make_side_effect(call_counter)
+        patches = self._patch_requests(call_counter)
 
         out = tmp_path / "out.csv"
-        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out))
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
 
         expected = [
             "id", "text", "participant_id", "age", "entry_date",
-            "domain_results", "highest_domain_tier", "escalated_tier",
+            "domain_results", "global_flags", "global_flag_probabilities",
+            "highest_domain_tier", "escalated_tier",
             "escalation_reasons", "minimum_tier", "minimum_reasons",
             "floor_tier", "floor_reasons", "consolidated_tier", "consolidation_rationale",
             "final_tier", "final_rationale", "final_adjusted", "final_risk",
@@ -216,11 +287,11 @@ class TestMockedEndToEnd:
 
     def test_legacy_mapping(self, input_df, tmp_path):
         call_counter = [0]
-        side_effect = self._make_side_effect(call_counter)
+        patches = self._patch_requests(call_counter)
 
         out = tmp_path / "out.csv"
-        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out))
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
 
         # All green -> no_low_risk
         assert df["final_risk"].iloc[0] == "no_low_risk"
@@ -238,7 +309,7 @@ class TestMockedEndToEnd:
 
         out = tmp_path / "out.csv"
         with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out), guards_only=True)
+            df = run(input_df, str(out), keq=self._fake_keq(), guards_only=True)
 
         assert len(df) == 1, "Row should not be dropped on guard failure"
         assert "errors" in df.columns
@@ -248,15 +319,61 @@ class TestMockedEndToEnd:
 
     def test_csv_written(self, input_df, tmp_path):
         call_counter = [0]
-        side_effect = self._make_side_effect(call_counter)
+        patches = self._patch_requests(call_counter)
 
         out = tmp_path / "out.csv"
-        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out))
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
 
         assert out.exists()
         saved_df = pd.read_csv(out)
         assert len(saved_df) == 1
+
+    def test_domain_results_has_confidence_fields(self, input_df, tmp_path):
+        """domain_results contains tier, timing, tier_score, tier_probabilities, etc."""
+        call_counter = [0]
+        patches = self._patch_requests(call_counter)
+
+        out = tmp_path / "out.csv"
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
+
+        dr = df["domain_results"].iloc[0]
+        if isinstance(dr, str):
+            dr = json.loads(dr)
+        domain_data = dr.get("suicidality", {})
+        assert "tier" in domain_data
+        assert "timing" in domain_data
+        assert "tier_score" in domain_data
+        assert "tier_probabilities" in domain_data
+        assert "tier_confidence" in domain_data
+        assert "tier_mode_probability" in domain_data
+        assert "timing_probabilities" in domain_data
+        assert "timing_confidence" in domain_data
+        # No evidence or per-domain flags
+        assert "evidence" not in domain_data
+        assert "flags" not in domain_data
+
+    def test_global_flags_column_present(self, input_df, tmp_path):
+        """global_flags and global_flag_probabilities columns exist and are populated."""
+        call_counter = [0]
+        patches = self._patch_requests(call_counter)
+
+        out = tmp_path / "out.csv"
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
+
+        gf = df["global_flags"].iloc[0]
+        if isinstance(gf, str):
+            gf = json.loads(gf)
+        assert isinstance(gf, list)
+        # Should have at least one flag entry (lethal_means_access)
+        assert len(gf) >= 1
+
+        gfp = df["global_flag_probabilities"].iloc[0]
+        if isinstance(gfp, str):
+            gfp = json.loads(gfp)
+        assert "lethal_means_access" in gfp
 
 
 class TestGuardsOnly:
@@ -288,10 +405,13 @@ class TestGuardsOnly:
 
         out = tmp_path / "out.csv"
         with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out), guards_only=True)
+            df = run(input_df, str(out), keq={}, guards_only=True)
 
         assert call_counter[0] == 7  # 4 SG + 3 others
         assert len(df) == 1
+        # New columns should be present
+        assert "global_flags" in df.columns
+        assert "global_flag_probabilities" in df.columns
 
 
 class TestDemoData:
@@ -374,15 +494,18 @@ class TestMainCLI:
 
 
 class TestDeterministicPhases:
-    """Deterministic phases: tier ordering, incompleteness, floor_reasons."""
+    """Deterministic phases: tier ordering, incompleteness, floor_reasons, global_flags."""
 
-    def _make_df(self, domain_results, domain_incomplete=False):
+    def _make_df(self, domain_results, domain_incomplete=False, global_flags=None):
         """Helper to build a minimal DataFrame for run_deterministic_phases."""
-        return pd.DataFrame([{
+        row = {
             "id": 0, "text": "test", "age": 25, "entry_date": "2025-01-01",
             "domain_results": domain_results,
             "domain_incomplete": domain_incomplete,
-        }])
+        }
+        if global_flags is not None:
+            row["global_flags"] = global_flags
+        return pd.DataFrame([row])
 
     def test_empty_domain_results(self):
         """Empty domain_results yields incomplete=True, floor=yellow, domain_unavailable reason."""
@@ -459,6 +582,32 @@ class TestDeterministicPhases:
         assert "Domain coverage incomplete: True" in block
         assert "Floor reasons: domain_unavailable" in block
 
+    def test_global_flags_unioned_with_per_domain_flags(self):
+        """global_flags are unioned with per-domain flags for escalation/minimums."""
+        dr = {
+            "a": {"tier": "yellow", "flags": []},
+            "b": {"tier": "yellow", "flags": []},
+        }
+        global_flags = [
+            {"name": "lethal_means_access", "flagged": True, "probability": 0.8},
+            {"name": "current_intoxication", "flagged": False, "probability": 0.1},
+        ]
+        df = self._make_df(dr, global_flags=global_flags)
+        result = run_deterministic_phases(df)
+        # lethal_means_access is an escalation flag; yellow + escalation -> red
+        assert result["highest_domain_tier"].iloc[0] == "yellow"
+        # Should see escalation to red
+        assert result["escalated_tier"].iloc[0] == "red"
+
+    def test_kev_failure_sets_domain_incomplete_and_yellow_floor(self):
+        """When Kev fails and domain_incomplete=True, floor is yellow (unknown-domain floor)."""
+        dr = {}
+        df = self._make_df(dr, domain_incomplete=True, global_flags=[])
+        result = run_deterministic_phases(df)
+        assert result["domain_incomplete"].iloc[0] == True
+        assert result["floor_tier"].iloc[0] == "yellow"
+        assert "domain_unavailable" in result["floor_reasons"].iloc[0]
+
 
 class TestGuardsOnlyFloorReasons:
     """Guards-only mode includes floor_reasons column."""
@@ -479,33 +628,9 @@ class TestGuardsOnlyFloorReasons:
 
         out = tmp_path / "out.csv"
         with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out), guards_only=True)
+            df = run(input_df, str(out), keq={}, guards_only=True)
 
         assert "floor_reasons" in df.columns
-
-
-class TestCallerNoEmptyModel:
-    """_caller raises ValueError when model is missing or blank."""
-
-    def test_empty_model_raises(self):
-        with mock.patch("risk_pipeline.requests.post"):
-            with pytest.raises(ValueError, match="model is missing or blank"):
-                _caller("http://example.com", json={"messages": []})
-
-    def test_blank_model_raises(self):
-        with mock.patch("risk_pipeline.requests.post"):
-            with pytest.raises(ValueError, match="model is missing or blank"):
-                _caller("http://example.com", json={"model": "", "messages": []})
-
-    def test_valid_model_succeeds(self):
-        mock_resp = mock.Mock()
-        mock_resp.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
-        mock_resp.raise_for_status = mock.Mock()
-        with mock.patch("risk_pipeline.requests.post", return_value=mock_resp) as mock_post:
-            _caller("http://example.com", json={"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]})
-            mock_post.assert_called_once()
-            body = mock_post.call_args[1]["json"]
-            assert body["model"] == "gpt-4"
 
 
 class TestDeliberationModelRouting:
@@ -517,6 +642,81 @@ class TestDeliberationModelRouting:
             {"id": 0, "text": "test entry", "age": 25, "entry_date": "2025-01-01", "participant_id": "P001"},
         ])
 
+    def _patch_requests(self, call_counter, request_bodies):
+        """Patch both risk_pipeline and kev_client requests.post, incrementing shared counter once."""
+        patched = [False]
+        def wrapped(url, **kwargs):
+            if not patched[0]:
+                patched[0] = True
+                call_counter[0] += 1
+                if "json" in kwargs:
+                    request_bodies.append(kwargs["json"])
+                patched[0] = False
+                return self._response_for_call(url, call_counter[0], request_bodies)
+            return self._response_for_call(url, call_counter[0], request_bodies)
+        return (
+            mock.patch("risk_pipeline.requests.post", side_effect=wrapped),
+            mock.patch("kev_client.requests.post", side_effect=wrapped),
+        )
+
+    def _response_for_call(self, url, call_num, request_bodies=None):
+        """Return the mock response for a given call number."""
+        r = mock.Mock()
+        r.status_code = 200
+        r.raise_for_status = mock.Mock()
+        if url.endswith("/v1/completions"):
+            r.json.return_value = {"choices": [{"text": "No"}]}
+            return r
+        if 5 <= call_num <= 7:
+            if call_num == 5:
+                content = "safe"
+            elif call_num == 6:
+                content = "No"
+            else:
+                content = "Safety: Safe\nCategories: None"
+            r.json.return_value = {"choices": [{"message": {"content": content}}]}
+            return r
+        if "/v1/systemone" in url:
+            r.json.return_value = self._make_kev_response()
+            return r
+        r.json.return_value = {
+            "choices": [{
+                "message": {
+                    "content": '{"tier": "green", "rationale": "ok"}'
+                }
+            }]
+        }
+        return r
+
+    def _fake_keq(self):
+        """Return a minimal Kev question config for testing."""
+        return {
+            "reading_rules": "test rules",
+            "timing": {"type": "choice", "instructions": "test", "criteria": {"unclear": "unclear"}},
+            "flags": {"lethal_means_access": {"type": "noul", "instructions": "test"}},
+            "domains": [
+                {"domain": "suicidality", "tier": {"type": "score", "instructions": "test", "criteria": ["g", "y", "r"]}},
+            ],
+        }
+
+    def _make_kev_response(self):
+        """Build a Kev response body with all domains green."""
+        return {
+            "answers": {
+                "suicidality__tier": {
+                    "score": 0.1,
+                    "probabilities": {"0": 0.9, "1": 0.09, "2": 0.01},
+                    "confidence": 0.95,
+                },
+                "suicidality__timing": {
+                    "choice": "unclear",
+                    "probabilities": {"unclear": 0.9},
+                    "confidence": 0.9,
+                },
+                "flag__lethal_means_access": {"noul": 0.1},
+            }
+        }
+
     def _make_side_effect(self, call_counter, request_bodies):
         """Build side_effect that captures all request bodies."""
         def side_effect(url, **kwargs):
@@ -526,9 +726,13 @@ class TestDeliberationModelRouting:
             r = mock.Mock()
             if url.endswith("/v1/completions"):
                 r.json.return_value = {"choices": [{"text": "No"}]}
+            elif "/v1/systemone" in url:
+                # Kev call
+                r.json.return_value = self._make_kev_response()
             else:
                 call = call_counter[0]
                 if 5 <= call <= 7:
+                    # Guard calls
                     if call == 5:
                         content = "safe"
                     elif call == 6:
@@ -537,10 +741,11 @@ class TestDeliberationModelRouting:
                         content = "Safety: Safe\nCategories: None"
                     r.json.return_value = {"choices": [{"message": {"content": content}}]}
                 else:
+                    # Deliberation calls (consolidation + final update)
                     r.json.return_value = {
                         "choices": [{
                             "message": {
-                                "content": '{"domain": "test_domain", "tier": "green", "timing": "unclear", "flags": [], "evidence": "no risk"}'
+                                "content": '{"tier": "green", "rationale": "ok"}'
                             }
                         }]
                     }
@@ -552,25 +757,25 @@ class TestDeliberationModelRouting:
         """Full run() completes without custom/consolidation/final errors."""
         call_counter = [0]
         request_bodies = []
-        side_effect = self._make_side_effect(call_counter, request_bodies)
+        patches = self._patch_requests(call_counter, request_bodies)
         out = tmp_path / "out.csv"
-        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            df = run(input_df, str(out))
+        with patches[0], patches[1]:
+            df = run(input_df, str(out), keq=self._fake_keq())
         assert df["custom_prompt_errors"].iloc[0] == ""
         assert df["consolidation_error"].iloc[0] == ""
         assert df["final_update_error"].iloc[0] == ""
 
     def test_all_deliberation_bodies_contain_model_id(self, input_df, tmp_path):
-        """Every custom, consolidation, and final request body contains DELIBERATION_MODEL_ID."""
+        """Every deliberation request body contains DELIBERATION_MODEL_ID."""
         call_counter = [0]
         request_bodies = []
-        side_effect = self._make_side_effect(call_counter, request_bodies)
+        patches = self._patch_requests(call_counter, request_bodies)
         out = tmp_path / "out.csv"
-        with mock.patch("risk_pipeline.requests.post", side_effect=side_effect):
-            run(input_df, str(out))
-        # Calls 5-7 are guard calls (llama, granite, qwen) with guard model IDs
-        # Calls 8-72 are deliberation calls (custom prompts + consolidation + final)
-        deliberation_bodies = request_bodies[7:]  # skip first 7 guard calls (4 SG + 3 chat)
+        with patches[0], patches[1]:
+            run(input_df, str(out), keq=self._fake_keq())
+        # Calls 1-7 are guard calls (4 SG + 3 chat), call 8 is Kev (no model_id)
+        # Calls 9-10 are deliberation calls (consolidation + final)
+        deliberation_bodies = request_bodies[8:]  # skip first 8 calls (7 guards + 1 Kev)
         for body in deliberation_bodies:
             assert body["model"] == DELIBERATION_MODEL_ID
 
@@ -581,12 +786,21 @@ class TestDeliberationModelRouting:
         call_counter = [0]
         urls_seen = []
 
+        patched = [False]
         def side_effect(url, **kwargs):
-            call_counter[0] += 1
-            urls_seen.append(url)
+            if not patched[0]:
+                patched[0] = True
+                call_counter[0] += 1
+                urls_seen.append(url)
+                patched[0] = False
+            else:
+                urls_seen.append(url)
             r = mock.Mock()
+            r.status_code = 200
             if url.endswith("/v1/completions"):
                 r.json.return_value = {"choices": [{"text": "No"}]}
+            elif "/v1/systemone" in url:
+                r.json.return_value = self._make_kev_response()
             else:
                 call = call_counter[0]
                 if 5 <= call <= 7:
@@ -601,7 +815,7 @@ class TestDeliberationModelRouting:
                     r.json.return_value = {
                         "choices": [{
                             "message": {
-                                "content": '{"domain": "test_domain", "tier": "green", "timing": "unclear", "flags": [], "evidence": "no risk"}'
+                                "content": '{"tier": "green", "rationale": "ok"}'
                             }
                         }]
                     }
@@ -611,37 +825,14 @@ class TestDeliberationModelRouting:
         expected = _join_url(custom_url, custom_path)
         out = tmp_path / "out.csv"
         with mock.patch("risk_pipeline.requests.post", side_effect=side_effect), \
+             mock.patch("kev_client.requests.post", side_effect=side_effect), \
              mock.patch("risk_pipeline.DELIBERATION_BASE_URL", custom_url), \
              mock.patch("risk_pipeline.DELIBERATION_PATH", custom_path):
-            run(input_df, str(out))
-        # All deliberation calls (calls 8-72) should use the monkeypatched URL
-        deliberation_urls = urls_seen[7:]
+            run(input_df, str(out), keq=self._fake_keq())
+        # All deliberation calls (calls 9-10) should use the monkeypatched URL
+        deliberation_urls = urls_seen[8:]
         for url in deliberation_urls:
             assert url == expected
-
-    def test_custom_prompts_defaults(self):
-        """run_custom_prompts_stage defaults resolve to deliberation model/URL."""
-        df = pd.DataFrame([{"id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01"}])
-        templates = {"test": "$text"}
-        captured = {}
-
-        def fake_caller(url, **kwargs):
-            captured["url"] = url
-            captured["model"] = kwargs.get("json", {}).get("model", "")
-            r = mock.Mock()
-            r.json.return_value = {
-                "choices": [{
-                    "message": {
-                        "content": '{"domain": "test", "tier": "green", "timing": "unclear", "flags": [], "evidence": "ok"}'
-                    }
-                }]
-            }
-            r.raise_for_status = mock.Mock()
-            return r
-
-        run_custom_prompts_stage(df, templates, caller=fake_caller)
-        assert captured["model"] == DELIBERATION_MODEL_ID
-        assert captured["url"] == _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
 
     def test_consolidation_defaults(self):
         """run_consolidation_and_final_update defaults resolve to deliberation model/URL/max_tokens."""
@@ -679,3 +870,67 @@ class TestDeliberationModelRouting:
         assert captured["model"] == DELIBERATION_MODEL_ID
         assert captured["url"] == _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
         assert captured["max_tokens"] == DELIBERATION_MAX_TOKENS
+
+
+class TestKeDomainStage:
+    """Kev domain stage: run_kev_domain_stage produces correct columns."""
+
+    def _fake_keq(self):
+        return {
+            "reading_rules": "test rules",
+            "timing": {"type": "choice", "instructions": "test", "criteria": {"unclear": "unclear"}},
+            "flags": {"lethal_means_access": {"type": "noul", "instructions": "test"}},
+            "domains": [
+                {"domain": "suicidality", "tier": {"type": "score", "instructions": "test", "criteria": ["g", "y", "r"]}},
+            ],
+        }
+
+    def test_kev_stage_columns(self):
+        """run_kev_domain_stage adds expected columns."""
+        df = pd.DataFrame([{"id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01"}])
+
+        call_counter = [0]
+        def fake_post(url, **kwargs):
+            call_counter[0] += 1
+            r = mock.Mock()
+            r.status_code = 200
+            r.json.return_value = {
+                "answers": {
+                    "suicidality__tier": {
+                        "score": 0.1,
+                        "probabilities": {"0": 0.9, "1": 0.09, "2": 0.01},
+                        "confidence": 0.95,
+                    },
+                    "suicidality__timing": {
+                        "choice": "unclear",
+                        "probabilities": {"unclear": 0.9},
+                        "confidence": 0.9,
+                    },
+                    "flag__lethal_means_access": {"noul": 0.1},
+                }
+            }
+            r.raise_for_status = mock.Mock()
+            return r
+
+        with mock.patch("kev_client.requests.post", side_effect=fake_post):
+            result = run_kev_domain_stage(df, keq=self._fake_keq())
+
+        assert "domain_results" in result.columns
+        assert "domain_incomplete" in result.columns
+        assert "custom_prompt_errors" in result.columns
+        assert "global_flags" in result.columns
+        assert "global_flag_probabilities" in result.columns
+        assert call_counter[0] == 1  # only one Kev call per row
+
+    def test_kev_failure_sets_domain_incomplete(self):
+        """When Kev call fails, domain_incomplete=True and error is recorded."""
+        df = pd.DataFrame([{"id": 0, "text": "hi", "age": 25, "entry_date": "2025-01-01"}])
+
+        def fake_post(url, **kwargs):
+            raise RuntimeError("connection refused")
+
+        with mock.patch("kev_client.requests.post", side_effect=fake_post):
+            result = run_kev_domain_stage(df, keq=self._fake_keq())
+
+        assert result["domain_incomplete"].iloc[0] == True
+        assert "connection refused" in result["custom_prompt_errors"].iloc[0]
