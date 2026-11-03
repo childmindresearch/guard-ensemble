@@ -1,0 +1,59 @@
+reading_rules: |
+  - **Coded language and slang** — Treat filter-evading slang, abbreviations, and emoji (e.g., "unalive," "kms," "kys," "sewerslide," 🔪, 🪦) exactly like explicit language. Misspellings and non-English content are tiered on meaning.
+  - **Jokes, fiction, and quotes** — First-person fiction, roleplay, or "jokes" that include a specific method, target, or timeframe are at least Yellow. Song lyrics or quotes that the participant presents as reflecting their own feelings are tiered as if the participant wrote them.
+
+timing:
+  type: choice
+  instructions: |
+    How recent is the risk described in the entry for this domain? Use the entry date in the state.
+  criteria:
+    historical_resolved: |
+      More than 3 months before writing; explicitly no longer occurring; no current recurrence, access, or unresolved safety issue.
+    historical_unresolved: |
+      More than 3 months before writing, but consequences, exposure, current symptoms, perpetrator access, or safety status remain unclear.
+    recent: |
+      Within 3 months before writing. Injuries, ingestions, and sexual assault within 2 weeks before writing are treated as current.
+    current: |
+      Happening at the time of writing, repeatedly, or during the 2 weeks before writing.
+    imminent: |
+      Participant states or strongly implies that a dangerous event may occur soon.
+    unclear: |
+      Timing cannot be determined. Do not assume historical resolution.
+
+flags:
+  lethal_means_access:
+    type: noul
+    instructions: |
+      Does the entry indicate access to lethal means (e.g., firearms, medications, other means to harm self)?
+  current_intoxication:
+    type: noul
+    instructions: |
+      Does the entry describe current intoxication from substances?
+  alone_no_support:
+    type: noul
+    instructions: |
+      Does the entry describe the participant being alone without adequate support?
+  minor_abuse_disclosure:
+    type: noul
+    instructions: |
+      Does the entry disclose abuse or neglect of a minor?
+  past_suicide_attempt:
+    type: noul
+    instructions: |
+      Does the entry mention a past suicide attempt?
+  past_self_harm:
+    type: noul
+    instructions: |
+      Does the entry mention past self-harm behavior?
+  past_sexual_assault:
+    type: noul
+    instructions: |
+      Does the entry mention past sexual assault?
+  past_psychosis:
+    type: noul
+    instructions: |
+      Does the entry mention past psychosis or psychotic symptoms?
+  past_eating_disorder:
+    type: noul
+    instructions: |
+      Does the entry mention a past eating disorder?
