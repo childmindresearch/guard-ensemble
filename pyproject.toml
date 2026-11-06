@@ -1,0 +1,18 @@
+[project]
+name = "guard-ensemble"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+  { name = "Greg Kiar", email = "gregory.kiar@childmind.org" },
+  { name = "Amani del Pilar", email = "amani.del_pilar@childmind.org" },
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+guard-ensemble = "guard_ensemble:main"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
