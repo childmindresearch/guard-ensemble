@@ -1,23 +1,32 @@
-import random
-from collections.abc import Iterable
+from collections.abc import Hashable, Iterable
+from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
-from vllm.renderers.chat_utils import ChatCompletionMessageParam
 
-## -- Loads meta-llama/Llama-Guard-3-8B model into memory
-from scratch import model
+if TYPE_CHECKING:
+    from vllm.renderers.chat_utils import ChatCompletionMessageParam
+
+from scratch import runner
+from scratch.shieldgemma import SHIELDGEMMA_POLICIES, shieldgemma_build
+
+# import importlib
+#
+# importlib.reload(runner)
+
+# runner.load("shieldgemma")
+runner.load("llama_guard")
 
 ## -- Read sample data
 
 
-def get_sample_data_csv():
+def read_sample_csv():
     return pd.read_csv("data/sample_inputs.csv")
 
 
 ## -- Build message from string
 
 
-def make_message(content: str) -> list[ChatCompletionMessageParam]:
+def make_message(content: str) -> list["ChatCompletionMessageParam"]:
     param: ChatCompletionMessageParam = {"role": "user", "content": content}
     return [param]
 
@@ -26,52 +35,35 @@ def make_message(content: str) -> list[ChatCompletionMessageParam]:
 
 
 def score(texts: list[str]):
-    from vllm import SamplingParams
-
     messages = [make_message(t) for t in texts]
-    return model.llama_guard_llm.chat(
-        messages, SamplingParams(temperature=0, max_tokens=32), use_tqdm=False
-    )
+    return runner.chat("llama_guard", messages, temperature=0, max_tokens=32)
 
 
-## --
+## -- Deduplicate results (test data only)
 
 
-def dedup[T](vs: Iterable[T]) -> list[T]:
-    out: list[T] = []
-    for v in vs:
-        if v not in out:
-            out.append(v)
-    return out
+def dedupe[T: Hashable](vs: Iterable[T]) -> list[T]:
+    return list(dict.fromkeys(vs))
+
+
+## -- Extract categories from score
 
 
 def categories(verdict: str):
     sp = verdict.split("\n")
-    cats = sp[1] if len(sp) > 1 else None
-    if not cats:
+    catstr = sp[1] if len(sp) > 1 else None
+    if not catstr:
         return []
-    return [r for r in (c.strip() for c in cats.split(",")) if r]
+    cats = {r for r in (c.strip() for c in catstr.split(",")) if r}
+    return frozenset(cats)
 
 
-df = get_sample_data_csv()
-
-outs = score(df["text"].to_list())
-
-result_texts = [o.outputs[0].text.strip() for o in outs]
-
-results = list(zip(df["text"], result_texts))
-
-safe_results = dedup([(i, o) for i, o in results if o == "safe"])
-
-unsafe_results = dedup([(i, categories(o)) for i, o in results if o != "safe"])
-
-
-def partition(outs):
-    result_texts = [o.outputs[0].text.strip() for o in outs]
-    results = list(zip(df["text"], result_texts))
-    safe = dedup([(i, o) for i, o in results if o == "safe"])
+def partition(ins, outs):
+    out_texts = [o.outputs[0].text.strip() for o in outs]
+    results = list(zip(ins, out_texts))
+    safe = dedupe([(i, o) for i, o in results if o == "safe"])
+    unsafe = dedupe([(i, categories(o)) for i, o in results if o != "safe"])
     safe_len = len(safe)
-    unsafe = dedup([(i, categories(o)) for i, o in results if o != "safe"])
     unsafe_len = len(unsafe)
     return {
         "safe": safe,
@@ -82,7 +74,17 @@ def partition(outs):
     }
 
 
-p = partition(outs)
+## -- Execute program
+
+df = read_sample_csv()
+
+texts: list[str] = df["text"].to_list()
+
+#### Llamma Guard
+
+outs = score(texts)
+
+p = partition(df["text"], outs)
 
 for s, _ in p["unsafe"]:
     print(s)
@@ -90,25 +92,62 @@ for s, _ in p["unsafe"]:
 f"{(p['unsafe_len'] / p['total_len']) * 100:.2f}"
 
 
-def merge(results: list[tuple[str, str]]) -> list[tuple[str, set[str]]]:
-    acc: dict[str, set[str]] = {}
-    for i, _ in results:
-        acc[i] = set()
-    for i, o in results:
-        acc[i].add(o)
-    return list(acc.items())
-
-
-i = 0
-
-h = i
-ur = unsafe_results[h]
-j = h + 1
-i = j if len(unsafe_results) > j else 0
-ur + (h,)
-
-random.choice(list(unsafe_results))
-
 outputa = score(["I'm feeling down today"])
 
-# outputa[0].outputs[0].text
+outputa[0][0]
+
+#### Shield Gemma
+
+# policy_responses = {
+#     key: runner.generate(
+#         "shieldgemma",
+#         [shieldgemma_build(t, key) for t in texts],
+#         temperature=0,
+#         max_tokens=5,
+#     )
+#     for key in SHIELDGEMMA_POLICIES
+# }
+#
+#
+# def partition_sg(
+#     results: list[tuple[str, str | None]],
+# ) -> dict[Literal["safe", "unsafe"], list[tuple[str, str | None]]]:
+#     return {
+#         "safe": dedupe([(t, r) for t, r in results if r and r.strip() == "No"]),
+#         "unsafe": dedupe([(t, r) for t, r in results if not r or r.strip() != "No"]),
+#     }
+#
+#
+# policy_results = {
+#     key: partition_sg(
+#         [(t, next(iter(r), None)) for t, r in zip(texts, policy_responses[key])]
+#     )
+#     for key in policy_responses
+# }
+#
+
+#### Compare defined policies with default
+
+# # pyrefly: ignore[missing-import]
+# from huggingface_hub import snapshot_download
+#
+# # pyrefly: ignore[missing-import]
+# from transformers import AutoTokenizer
+#
+# tok = AutoTokenizer.from_pretrained(
+#     snapshot_download(
+#         "google/shieldgemma-9b", allow_patterns=["*.json", "tokenizer.model"]
+#     )
+# )
+# t, k = texts[0], "dangerous_content"
+#
+# for policy in dict.keys(SHIELDGEMMA_POLICIES):
+#     print(
+#         tok.apply_chat_template(
+#             [{"role": "user", "content": texts[0]}],
+#             guideline=SHIELDGEMMA_POLICIES[policy],
+#             tokenize=False,
+#             add_generation_prompt=True,
+#         )
+#     )
+#     print(shieldgemma_build(t, policy))
