@@ -11,7 +11,7 @@
 set -eou pipefail
 
 NAME=guard-kernel
-IMAGE=guard-llama
+IMAGE=guard-ensemble
 RUNTIME_DIR=/tmp/svim-k
 
 if [[ "${1:-}" == "stop" ]]; then
@@ -27,9 +27,22 @@ fi
 
 HF_TOKEN="$(cat hf_token)"
 
+DETACH=""
+
+if [[ "${1:-}" == "--detach" ]]; then
+  DETACH="1"
+fi
+
+kernel_args=(
+  --kernel=python3
+  --KernelManager.transport=ipc
+  --KernelManager.ip=/run/kernel/k
+)
+
 docker run \
   --name "$NAME" \
   --rm \
+  ${DETACH:+--detach} \
   --entrypoint jupyter \
   --user "$(id -u):$(id -g)" \
   --gpus all \
@@ -41,6 +54,4 @@ docker run \
   -v "$RUNTIME_DIR":/run/kernel \
   -v "$PWD:/app" \
   "$IMAGE" \
-  kernel --kernel=python3 \
-         --KernelManager.transport=ipc \
-         --KernelManager.ip=/run/kernel/k
+  kernel "${kernel_args[@]}"

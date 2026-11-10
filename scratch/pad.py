@@ -7,12 +7,13 @@ def reload_modules():
     import importlib
 
     importlib.reload(lib)
+
     importlib.reload(models)
     importlib.reload(runner)
     importlib.reload(shieldgemma)
 
 
-# reload_modules() # <- Uncomment to reload scratchpad
+# reload_modules()  # <- Uncomment to reload scratchpad
 
 ## Read sample data
 
@@ -42,7 +43,9 @@ def run_llama_guard():
     return lib.llama_guard_partition(texts, outs)
 
 
-score_results = run_llama_guard()
+# llama_results = run_llama_guard()
+#
+# llama_results["unsafe"]
 
 
 #### Shield Gemma
@@ -66,17 +69,55 @@ def run_shieldgemma():
     }
 
     return {
-        key: lib.shield_gemma_partition(
-            [(t, next(iter(r), None)) for t, r in zip(texts, policy_responses[key])]
-        )
+        key: lib.shieldgemma_partition(texts, policy_responses[key])
         for key in policy_responses
     }
 
 
-policy_results = run_shieldgemma()
+# gemma_results = run_shieldgemma()
+#
+# [(p, t) for p, rs in gemma_results.items() for t, _ in rs["unsafe"]]
 
-[
-    (p, t)
-    for p, rs in policy_results.items()
-    for t, _ in rs["unsafe"]
-]
+
+#### Granite Guardian
+
+
+def run_granite_guardian():
+    runner.load("granite_guardian")
+
+    df = read_sample_csv()
+    texts: list[str] = df["text"].to_list()
+
+    outs = runner.chat(
+        "granite_guardian",
+        lib.create_messages(texts),
+        temperature=0,
+        max_tokens=32,
+    )
+
+    return lib.granite_guardian_partition(texts, outs)
+
+
+# granite_results = run_granite_guardian()
+
+
+#### Qwen Guard
+
+
+def run_qwen_guard():
+    runner.load("qwen_guard")
+
+    df = read_sample_csv()
+    texts: list[str] = df["text"].to_list()
+
+    outs = runner.chat(
+        "qwen_guard",
+        lib.create_messages(texts),
+        temperature=0,
+        max_tokens=32,
+    )
+
+    return lib.qwen_guard_partition(texts, outs)
+
+
+# qwen_results = run_qwen_guard()

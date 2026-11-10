@@ -31,7 +31,9 @@ import traceback
 
 from scratch.models import MODEL_KEY, MODELS
 
-DEFAULT_ALLOW_PATTERNS = ["*.json", "*.safetensors"]
+# *.jinja: newer HF repos ship the chat template as chat_template.jinja
+# instead of inside tokenizer_config.json.
+DEFAULT_ALLOW_PATTERNS = ["*.json", "*.safetensors", "*.jinja"]
 
 
 def serve(model: MODEL_KEY) -> None:
