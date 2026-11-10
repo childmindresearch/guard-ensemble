@@ -12,13 +12,24 @@ frees all of its GPU memory.
     runner.stop()           # free the GPU
 
 Keyword args are passed straight to vllm.SamplingParams.
-Worker output (vLLM logs, tracebacks) goes to scratch/logs/<model>.log.
+Worker output (vLLM logs, tracebacks, progress bar) goes to
+scratch/logs/<model>.log -- `tail -f` it to tell "slow" from "stuck".
 
+With `logprobs=k`, each completion is {"text": ..., "logprobs": [{token: lp}, ...]}
+instead of a plain string, e.g. P(Yes) for ShieldGemma:
+
+    outs = runner.chat("shieldgemma", msgs, chat_template_kwargs={"guideline": p},
+                       temperature=0, max_tokens=1, logprobs=5)
+    math.exp(outs[i][0]["logprobs"][0].get("Yes", float("-inf")))
+
+`timeout=` (seconds) bounds a call; on timeout, or if the worker dies, the
+worker is killed and the error includes the end of its log.
 If a call is interrupted (Ctrl-C) the worker is killed, since its reply would
 otherwise arrive out of sync; the next call reloads the model.
 
-`importlib.reload(runner)` keeps the running worker. scratch/worker.py is
-re-read every time a worker starts, so new MODELS entries need no reload.
+`importlib.reload(runner)` keeps the running worker. scratch/models.py and
+scratch/worker.py are re-read every time a worker starts, so edits to MODELS
+need no manual reload.
 If the kernel restarts, the old worker is found via a pidfile and killed on
 the next load().
 """
@@ -29,17 +40,15 @@ import atexit
 import importlib
 import json
 import os
+import select
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import IO, TYPE_CHECKING
+from typing import IO, Any
 
-from scratch import worker
-
-if TYPE_CHECKING:
-    from scratch.worker import MODEL_KEY
+from scratch import models, worker
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG_DIR = Path(__file__).resolve().parent / "logs"
@@ -62,14 +71,15 @@ def current() -> str | None:
     return None
 
 
-def load(model: MODEL_KEY) -> None:
+def load(model: models.MODEL_KEY) -> None:
     """Make sure `model` is loaded, replacing any other model."""
     global _proc, _model, _log
     if current() == model:
         return
-    importlib.reload(worker)  # pick up edits to MODELS
-    if model not in worker.MODELS:
-        raise KeyError(f"unknown model {model!r}; known: {sorted(worker.MODELS)}")
+    importlib.reload(models)
+    importlib.reload(worker)
+    if model not in models.MODELS:
+        raise KeyError(f"unknown model {model!r}; known: {sorted(models.MODELS)}")
     stop()
     _kill_stale()
 
@@ -94,23 +104,28 @@ def load(model: MODEL_KEY) -> None:
 
 
 def chat(
-    model: MODEL_KEY,
+    model: models.MODEL_KEY,
     conversations: list,
     chat_template_kwargs: dict | None = None,
+    timeout: float | None = None,
     **sampling,
-) -> list[list[str]]:
+) -> list[list[Any]]:
     """Run llm.chat over a list of conversations (each a list of message dicts).
 
     chat_template_kwargs are extra variables for the model's chat template and
     apply to the whole batch, e.g. {"guideline": policy} for ShieldGemma.
     """
-    extra = {"chat_template_kwargs": chat_template_kwargs} if chat_template_kwargs else {}
-    return _request(model, "chat", conversations, sampling, extra)
+    extra = (
+        {"chat_template_kwargs": chat_template_kwargs} if chat_template_kwargs else {}
+    )
+    return _request(model, "chat", conversations, sampling, extra, timeout)
 
 
-def generate(model: MODEL_KEY, prompts: list[str], **sampling) -> list[list[str]]:
+def generate(
+    model: models.MODEL_KEY, prompts: list[str], timeout: float | None = None, **sampling
+) -> list[list[Any]]:
     """Run llm.generate over raw prompt strings (no chat template applied)."""
-    return _request(model, "generate", prompts, sampling)
+    return _request(model, "generate", prompts, sampling, timeout=timeout)
 
 
 def stop(grace: float = 15.0) -> None:
@@ -143,19 +158,25 @@ atexit.register(stop)
 
 
 def _request(
-    model: MODEL_KEY,
+    model: models.MODEL_KEY,
     mode: str,
     inputs: list,
     sampling: dict,
     extra: dict | None = None,
-) -> list[list[str]]:
+    timeout: float | None = None,
+) -> list[list[Any]]:
     load(model)
     _, stdin, _ = _pipes()
     try:
-        req = {"mode": mode, "inputs": list(inputs), "sampling": sampling, **(extra or {})}
+        req = {
+            "mode": mode,
+            "inputs": list(inputs),
+            "sampling": sampling,
+            **(extra or {}),
+        }
         stdin.write(json.dumps(req) + "\n")
         stdin.flush()
-        return _recv()["result"]
+        return _recv(timeout)["result"]
     except WorkerError:
         raise
     except BaseException:
@@ -171,8 +192,27 @@ def _pipes() -> tuple[subprocess.Popen, IO[str], IO[str]]:
     return proc, proc.stdin, proc.stdout
 
 
-def _recv() -> dict:
+def _recv(timeout: float | None = None, poll: float = 2.0) -> dict:
+    """Wait for one reply, checking every `poll` seconds that the worker is alive.
+
+    A dead engine core surfaces as a WorkerError (vLLM raises in the worker);
+    a hung one can only be caught by `timeout`.
+
+    One message is outstanding at a time and readline consumes it entirely,
+    so select() on the raw fd is safe despite the text-mode buffering.
+    """
     proc, _, stdout = _pipes()
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while True:
+        ready, _, _ = select.select([stdout], [], [], poll)
+        if ready:
+            break
+        if proc.poll() is not None:
+            break  # worker exited; readline returns "" below
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError(
+                f"{_model} worker gave no reply in {timeout}s:\n{_tail()}"
+            )
     line = stdout.readline()
     if not line:
         rc = proc.wait()
