@@ -1,0 +1,44 @@
+# Domain: Mania, Agitation, or Severe Behavioral Dysregulation
+
+Rate the entry for signs of mania, agitation, or severe behavioral dysregulation. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers mania-like or severely dysregulated behavior: markedly reduced need for sleep with high energy, grandiosity, agitation, or impulsive, out-of-character behavior. Rate Green if the entry has no such content, even if it describes other risks.
+
+Sadness, hopelessness, anger, anxiety, grief, suicidal or self-harm statements, substance use, and a single impulsive act are not this domain; they are rated in their own domains.
+
+## Tier Definitions
+
+### Green: Okay
+High energy, excitement, productivity, or temporarily reduced sleep without impairment, loss of judgment, or danger.
+
+**Examples:**
+- "I stayed up late because I was excited about my project."
+
+### Yellow: Concern
+Markedly reduced need for sleep with escalating energy, grandiosity, agitation, impulsivity, or impaired judgment; risky spending, unsafe driving, impulsive sexual risk-taking, abrupt behavioral change, or substantial functional deterioration without clear immediate danger.
+
+**Examples:**
+- "I have barely slept for three nights and feel unstoppable."
+- "I spent all my savings because I know I will become rich."
+
+### Red: Risk
+Dysregulation is producing serious current physical danger; extreme agitation, disorganization, psychosis, or impulsivity compromises immediate safety; participant is engaging in dangerous driving, entering hazardous environments, or taking extreme risks now.
+
+**Examples:**
+- "I am driving dangerously because nothing can happen to me."
+- "I have not slept for days and am entering traffic to prove I am protected."
+
+## Timing Guidance
+- **Green:** Transient elevated mood or energy without impairment or escalation.
+- **Yellow:** Symptoms present recently or persisting; abrupt behavioral change or functional decline within the past few weeks.
+- **Red:** Dysregulation producing serious physical danger at the time of writing, or underway within the past 2 weeks.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

@@ -1,5 +1,4 @@
 import re
-
 from collections.abc import Hashable, Iterable
 from typing import TYPE_CHECKING, TypedDict
 

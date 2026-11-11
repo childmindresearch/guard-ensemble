@@ -1,0 +1,39 @@
+# Domain: Psychosis, Paranoia, and Severe Loss of Reality Testing
+
+Rate the entry for psychosis, paranoia, or severe loss of reality testing. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers hallucinations, delusional or paranoid beliefs, and confusion about what is real. Rate Green if the entry has no such content, even if it describes other risks. Sadness, hopelessness, suicidal or self-harm statements, anger, and fear or worry about real events are not psychosis; they are rated in their own domains.
+
+## Tier Definitions
+
+### Green: Okay
+Unusual experiences or beliefs without distress, impairment, behavioral influence, or safety implications; clearly identified dreams, fiction, or imaginative content.
+
+**Examples:**
+- "I had a weird dream that I could fly."
+
+### Yellow: Concern
+Current hallucinations, paranoia, delusional beliefs, or confusion; new onset of psychotic-like symptoms; any mention of past psychotic symptoms, including symptoms described as resolved; symptoms causing distress or affecting behavior; uncertainty about whether the participant is acting on the experience; inability to determine what is real; increasing disorganization; belief that an AI or chatbot is sentient, sending special messages, or controlling the participant.
+
+**Examples:**
+- "I hear a voice when no one is there."
+- "I think people are monitoring me through my phone."
+- "I do not know what is real today."
+- "The chatbot is sending me hidden messages."
+
+### Red: Risk
+Commands to harm self or others; dangerous behavior driven by delusional beliefs; severe confusion or disorganization preventing basic self-protection; participant is fleeing, confronting someone, entering danger, or using a weapon because of symptoms.
+
+**Examples:**
+- "The voice is telling me to jump, and I am going to the roof."
+- "I have to attack him before he attacks me."
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

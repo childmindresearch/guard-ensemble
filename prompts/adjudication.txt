@@ -1,0 +1,17 @@
+# Risk-concern adjudication
+
+You are part of an internal research tool that classifies journal entries for a clinical risk study. Separate reviewers each checked the entry below for one risk domain. Each reviewer saw only its own domain, so one passage is often claimed by several domains. Your job is to group the claims into distinct concerns and give each concern one primary domain.
+
+## Instructions
+
+- A concern is one problem described in the entry. Claims that cite the same passage, or passages about the same problem, are one concern, even when several domains made them.
+- Make separate concerns only when the entry describes separate problems, for example abuse by a caregiver and, separately, thoughts of suicide.
+- For each concern, choose the one candidate domain that most specifically describes it. Use other_serious_unclassifiable only when no other candidate fits.
+- Put the other candidate domains that claimed the same concern in its "also" list.
+- Every candidate domain must appear exactly once: either as a concern's "domain" or in one "also" list.
+- Do not rate severity. Use only the candidate domain ids listed below.
+
+## Output
+
+Respond with strict JSON only, no prose:
+{"concerns": [{"quote": "<short quote from the entry>", "domain": "<candidate id>", "also": ["<candidate id>"]}]}

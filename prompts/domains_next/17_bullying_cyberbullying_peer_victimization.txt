@@ -1,0 +1,44 @@
+# Domain: Bullying, Cyberbullying, and Peer Victimization
+
+Rate the entry for bullying, cyberbullying, and peer victimization. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain applies only when the entry describes peers (classmates, friends, other young people, or people online) bullying, harassing, excluding, humiliating, threatening, or attacking the participant. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- Suicidal statements with no bullying described: Suicidality.
+- Harm by caregivers, partners, or adults: Abuse, Neglect, Coercion, and Exploitation.
+
+## Tier Definitions
+
+### Green: Okay
+Ordinary peer conflict without fear, repetition, or a power imbalance; resolved conflict.
+
+**Examples:**
+- "My friend and I fought but we made up."
+
+### Yellow: Concern
+Repeated bullying, harassment, exclusion, or humiliation in person or online; identity-based harassment (race, religion, disability, weight, sexual orientation, gender identity); being outed or threatened with being outed; fear of going to school; avoiding school or activities because of peers; bullying accompanied by hopelessness.
+
+**Examples:**
+- "Everyone in the group chat keeps telling me to kill myself."
+- "I faked sick again so I did not have to see them."
+
+### Red: Risk
+Peer threats of serious physical harm; physical assault by peers that is ongoing or imminent; bullying described in the entry together with suicidal thoughts or statements that others would be better off without the participant; participant describing retaliation with a weapon (also rated under Violence or Harm to Others and Threats to Schools, Groups, and Violent Extremism).
+
+**Examples:**
+- "They said they will jump me after school tomorrow."
+- "They call me names every day, and everyone would be happier if I was gone."
+
+## Timing Guidance
+- **Green:** Isolated incident that has resolved; no ongoing fear or avoidance.
+- **Yellow:** Bullying occurring recently or persisting; repeated harassment within the past few weeks.
+- **Red:** Threats of harm imminent or ongoing; bullying described in the entry together with suicidal content at the time of writing.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

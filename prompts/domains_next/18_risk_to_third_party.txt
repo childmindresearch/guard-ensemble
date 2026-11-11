@@ -1,0 +1,45 @@
+# Domain: Risk to a Third Party Disclosed by the Participant
+
+Rate the entry for risk to a third party disclosed by the participant. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain applies only when the participant discloses that another identifiable person is at risk from something other than the participant: for example, a friend's suicidal thoughts or self-harm, a sibling being abused, or a classmate's weapon. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- Risk to the participant themself: its own domain.
+- The participant wanting to hurt someone: Violence or Harm to Others.
+- The participant threatening a school or group: Threats to Schools, Groups, and Violent Extremism.
+
+## Tier Definitions
+
+### Green: Okay
+General concern about another person without risk content.
+
+**Examples:**
+- "My friend is stressed about exams."
+
+### Yellow: Concern
+Another identifiable person is described with concerning content (for example, their suicidal thoughts, self-harm, substance use, or being abused); participant is asked to keep another person's risk secret.
+
+**Examples:**
+- "My friend has been cutting and made me promise not to tell."
+- "I think my little brother gets hit at home."
+
+### Red: Risk
+Another identifiable person is described as in acute or imminent danger (for example, a suicide plan or timeframe, an attempt, a serious injury, or a weapon threat).
+
+**Examples:**
+- "My best friend says she is going to kill herself this weekend."
+- "A kid at school showed me a gun and a list of names."
+
+## Timing Guidance
+- **Green:** General concern without identifiable risk to another person.
+- **Yellow:** Another person's risk is described as recent or ongoing.
+- **Red:** Another person's risk is imminent or currently occurring.
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

@@ -1,0 +1,50 @@
+# Domain: Suicidality
+
+Rate the entry for suicidality. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers the participant's own thoughts of death or suicide, suicidal behavior, and suicide-related loss. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- Self-harm without intent to die: Nonsuicidal Self-Harm.
+- Another identifiable person's suicidal thoughts or behavior: Risk to a Third Party.
+- Grief or distress without a wish to be dead: Recent Traumatic Event or Loss.
+
+## Tier Definitions
+
+### Green: Okay
+No suicidal content; clearly nonpersonal discussion; nonsuicidal distress without a wish to be dead.
+
+**Examples:**
+- "We discussed suicide prevention in class."
+- "I'm so upset right now that I failed my driver's test."
+
+### Yellow: Concern
+Wish to be dead or not wake up (passive ideation); nonspecific active suicidal thoughts without method, intent, or plan; hopelessness with statements that life is not worth living; ambiguous suicidal language; suicide attempt or preparatory behavior more than 3 months before writing; any mention of past suicidal behavior; historical ideation with unclear current status; ideation accompanied by stated protective factors; recent suicide death or attempt by a friend, family member, classmate, or admired public figure.
+
+**Examples:**
+- "Sometimes I wish I would not wake up."
+- "I think about suicide, but I would never do that to my family."
+- "I tried to kill myself two years ago."
+- "A girl in my grade died by suicide last week and I cannot stop thinking about it."
+- "I was depressed years ago, but I have not had suicidal thoughts since."
+
+### Red: Risk
+Suicidal ideation with a method, intent, or plan; intense suicidal thoughts at the time of writing; preparatory behavior (acquiring means, researching methods, writing a note, giving belongings away, rehearsal); actual, interrupted, or aborted attempt in the past 3 months; attempt underway or possibly just completed; stated timeframe; inability or unwillingness to stay safe; farewell messages; acute suicidal content followed by apparent disengagement; command hallucinations to harm self.
+
+Farewell messages include goodbye letters or notes and veiled goodbyes: telling people not to blame themselves, apologizing for leaving, or saying the participant may not be around soon. These are Red even when suicide is not named.
+
+**Examples:**
+- "I am thinking about killing myself right now."
+- "I have been looking up how many pills it would take."
+- "I have what I need, and I plan to do it tonight."
+- "I took something, and I am getting sleepy."
+- "I wrote letters to everyone."
+- "If I'm gone by Friday, don't blame yourselves."
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

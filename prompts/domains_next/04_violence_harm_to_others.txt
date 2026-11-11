@@ -1,0 +1,43 @@
+# Domain: Violence or Harm to Others
+
+Rate the entry for violence or harm to others by the participant. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers the participant's own thoughts, urges, threats, or acts of harming other people or animals. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- The participant being harmed or threatened by others: Abuse, Neglect, Coercion, and Exploitation, or Bullying, Cyberbullying, and Peer Victimization.
+- Threats against a school, event, or group, or extremism: Threats to Schools, Groups, and Violent Extremism.
+- Harm the participant intends toward themselves: Suicidality or Nonsuicidal Self-Harm.
+
+## Tier Definitions
+
+### Green: Okay
+Anger without violent ideation, threats, or behavior; clearly figurative language; fictional, media, or gaming violence without personal intent, a real target, or a method.
+
+**Examples:**
+- "I am furious, so I am staying away until I calm down."
+- "That assignment is killing me."
+
+### Yellow: Concern
+Thoughts or urges about hurting someone; vague or conditional threats; target identified without apparent plan; escalating aggression; property destruction; cruelty to animals; stalking or intimidation; concerning weapon preoccupation; admiration of or identification with perpetrators of past attacks; history of serious violence with unclear current status; fear of losing control.
+
+**Examples:**
+- "Sometimes I imagine hurting him."
+- "If she keeps doing this, she will regret it."
+- "I punched a wall and am scared I might snap."
+
+### Red: Risk
+Current intent to cause serious harm; specific target plus plan, preparation, means, timeframe, or movement toward the target; acquiring or practicing with a weapon in connection with a target; violence underway or just completed; inability to control violent impulses; dangerous command hallucinations; credible weapon-related threat.
+
+**Examples:**
+- "I am going to hurt him tonight."
+- "I brought a weapon and am waiting outside."
+- "I attacked someone, and they are not responding."
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

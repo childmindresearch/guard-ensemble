@@ -1,19 +1,21 @@
 import pandas as pd
 
-from scratch import lib, models, runner, shieldgemma
+from scratch import domains, lib, models, runner, shieldgemma
 
 
 def reload_modules():
     import importlib
 
+    importlib.reload(domains)
     importlib.reload(lib)
-
     importlib.reload(models)
     importlib.reload(runner)
     importlib.reload(shieldgemma)
 
 
 # reload_modules()  # <- Uncomment to reload scratchpad
+
+# runner.stop()
 
 ## Read sample data
 
@@ -43,9 +45,9 @@ def run_llama_guard():
     return lib.llama_guard_partition(texts, outs)
 
 
-# llama_results = run_llama_guard()
-#
-# llama_results["unsafe"]
+llama_results = run_llama_guard()
+
+llama_results["unsafe"]
 
 
 #### Shield Gemma
@@ -74,7 +76,7 @@ def run_shieldgemma():
     }
 
 
-# gemma_results = run_shieldgemma()
+gemma_results = run_shieldgemma()
 #
 # [(p, t) for p, rs in gemma_results.items() for t, _ in rs["unsafe"]]
 
@@ -121,3 +123,14 @@ def run_qwen_guard():
 
 
 # qwen_results = run_qwen_guard()
+
+
+#### Domains: gate -> scoped JSON -> adjudicate (scratch/domains.py)
+
+
+reload_modules()
+res = domains.run(domains.read_sample_csv(100))
+domains.save(res, "domains_qwen3_4b_head100")
+
+# Re-adjudicate a saved JSON run without regenerating:
+# res = domains.adjudicate(domains.load("gated_qwen3_4b_head100_scoped"))

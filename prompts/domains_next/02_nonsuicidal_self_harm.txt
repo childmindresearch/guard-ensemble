@@ -1,0 +1,42 @@
+# Domain: Nonsuicidal Self-Harm
+
+Rate the entry for nonsuicidal self-harm. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers the participant deliberately hurting themselves, or thoughts and urges to, including when the intent is unclear. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- Thoughts of death or suicide without self-injury: Suicidality.
+- Another identifiable person's self-harm: Risk to a Third Party.
+- Accidental injury or thrill-seeking stunts: Dangerous Risk-Taking or Accidental Harm.
+
+## Tier Definitions
+
+### Green: Okay
+No self-harm content.
+
+**Examples:**
+- "I was so stressed I wanted to scream, so I went for a run."
+
+### Yellow: Concern
+Current urges; recent self-harm using a low-lethality method without evidence of serious injury; recurring or escalating behavior; concealed injuries; minimization; any mention of past self-harm, including self-harm described as resolved; historical self-harm with unclear current status; unclear distinction between nonsuicidal self-harm and suicidal behavior.
+
+**Examples:**
+- "I have wanted to start hurting myself again."
+- "I did it last night, but it was not a big deal."
+
+### Red: Risk
+Self-harm occurring now or possibly just completed; potentially serious injury (deep wounds, wounds that may need stitches, burns, signs of infection); significant blood loss or impaired consciousness; inability to stop; intention to continue immediately; any high-lethality method regardless of stated intent, including ligature, strangulation or choking, ingestion of medication or substances, or jumping; suicidal or unclear intent associated with a potentially lethal act.
+
+**Examples:**
+- "I hurt myself more seriously than I intended."
+- "I am bleeding and feel faint."
+- "I am doing it right now and cannot stop."
+- "I choked myself until I almost passed out, but I was not trying to die."
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date
