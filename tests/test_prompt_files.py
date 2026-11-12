@@ -1,26 +1,16 @@
-"""Validate all built-in prompt files: 21 domain prompts, shared files, and both LLM templates."""
+"""Validate all Kev YAML domain files: 21 domain prompts and shared config."""
 
-import os
 import re
 from pathlib import Path
-from string import Template
 
 import pytest
+import yaml
 
-from rubric import (
-    CANONICAL_DOMAINS,
-    load_domain_prompt_templates,
-)
-from deliberation import (
-    load_consolidation_prompt,
-    load_final_update_prompt,
-    consolidation_build,
-    final_update_build,
-)
+from rubric import CANONICAL_DOMAINS
 
-PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
-DOMAINS_DIR = PROMPTS_DIR / "domains"
-SHARED_DIR = PROMPTS_DIR / "_shared"
+KEV_DIR = Path(__file__).parent.parent / "prompts" / "kev"
+DOMAINS_DIR = KEV_DIR / "domains"
+SHARED_FILE = KEV_DIR / "_shared.yaml"
 
 # Domain files have numeric prefixes (01_, 02_, etc.) — strip them for comparison.
 def _strip_prefix(name: str) -> str:
@@ -28,138 +18,153 @@ def _strip_prefix(name: str) -> str:
     return m.group(1) if m else name
 
 
-class TestDomainPromptFiles:
-    """Validate all 21 built-in domain prompts."""
+class TestDomainYAMLFiles:
+    """Validate all 21 Kev domain YAML files."""
 
     @pytest.fixture
-    def templates(self):
-        return load_domain_prompt_templates(
-            str(DOMAINS_DIR),
-            str(SHARED_DIR / "rubric_prelude.txt"),
-            str(SHARED_DIR / "output_schema.txt"),
-        )
+    def domains(self):
+        result = {}
+        for f in sorted(DOMAINS_DIR.glob("*.yaml")):
+            with open(f) as fh:
+                data = yaml.safe_load(fh)
+            result[_strip_prefix(f.stem)] = data
+        return result
 
-    def test_count_is_21(self, templates):
-        assert len(templates) == 21, f"Expected 21 domain templates, got {len(templates)}"
+    def test_count_is_21(self, domains):
+        assert len(domains) == 21, f"Expected 21 domain files, got {len(domains)}"
 
-    def test_all_canonical_domains_present(self, templates):
-        slugs = {_strip_prefix(k) for k in templates}
+    def test_all_canonical_domains_present(self, domains):
         for domain in CANONICAL_DOMAINS:
-            assert domain in slugs, f"Missing domain template: {domain}"
+            assert domain in domains, f"Missing domain: {domain}"
 
-    def test_no_extra_domains(self, templates):
-        for key in templates:
-            slug = _strip_prefix(key)
+    def test_no_extra_domains(self, domains):
+        for slug in domains:
             assert slug in CANONICAL_DOMAINS, f"Unexpected domain: {slug}"
 
-    def test_each_prompt_has_required_placeholders(self, templates):
-        """Each domain template must contain $text, $age, $entry_date."""
-        for domain, content in templates.items():
-            assert "$text" in content, f"{domain} missing $text"
-            assert "$age" in content, f"{domain} missing $age"
-            assert "$entry_date" in content, f"{domain} missing $entry_date"
-
-    def test_no_unknown_placeholders(self, templates):
-        """No placeholder outside the known set."""
-        known = {"$text", "$age", "$entry_date", "$scores_block", "$$$"}
-        for domain, content in templates.items():
-            found = set(re.findall(r"\$\w+", content))
-            unknown = found - known
-            assert not unknown, f"{domain} has unknown placeholders: {unknown}"
-
-    def test_all_prompts_render_cleanly(self, templates):
-        """Every template renders without unresolved $ variables."""
-        sample = {
-            "text": "Sample entry text.",
-            "age": "18",
-            "entry_date": "2025-01-01",
-            "scores_block": "",
-        }
-        for domain, content in templates.items():
-            rendered = Template(content).substitute(**sample)
-            assert not re.search(r"\$[A-Za-z_]", rendered), (
-                f"{domain} has unresolved placeholder after render"
+    def test_each_domain_has_tier_score(self, domains):
+        for slug, data in domains.items():
+            assert data.get("tier", {}).get("type") == "score", (
+                f"{slug} tier.type is not 'score'"
             )
 
+    def test_each_domain_has_three_criteria(self, domains):
+        for slug, data in domains.items():
+            criteria = data.get("tier", {}).get("criteria", [])
+            assert len(criteria) == 3, (
+                f"{slug} has {len(criteria)} criteria, expected 3"
+            )
+
+    def test_criteria_contain_tier_labels(self, domains):
+        """Each criterion must reference its tier: Green, Yellow, Red."""
+        tier_labels = ["Green", "Yellow", "Red"]
+        for slug, data in domains.items():
+            criteria = data.get("tier", {}).get("criteria", [])
+            for i, label in enumerate(tier_labels):
+                criterion = criteria[i]
+                assert label in criterion, (
+                    f"{slug} criterion {i} missing label '{label}'"
+                )
+
+    def test_criteria_contain_examples(self, domains):
+        """Each criterion must contain 'Examples'."""
+        for slug, data in domains.items():
+            criteria = data.get("tier", {}).get("criteria", [])
+            for i, criterion in enumerate(criteria):
+                assert "Examples" in criterion, (
+                    f"{slug} criterion {i} missing examples"
+                )
+
+    def test_no_placeholder_variables(self, domains):
+        """No $text, $age, or $entry_date placeholders should remain."""
+        for slug, data in domains.items():
+            instructions = data.get("tier", {}).get("instructions", "")
+            assert "$text" not in instructions, f"{slug} contains $text placeholder"
+            assert "$age" not in instructions, f"{slug} contains $age placeholder"
+            assert "$entry_date" not in instructions, f"{slug} contains $entry_date placeholder"
+
+    def test_dialect_1_suicidality_has_inline_examples(self, domains):
+        """Dialect 1 domain (01_suicidality) criteria include examples."""
+        data = domains.get("suicidality")
+        assert data is not None
+        criteria = data["tier"]["criteria"]
+        for criterion in criteria:
+            assert "Examples" in criterion
+
+    def test_dialect_2_substance_has_bullet_examples(self, domains):
+        """Dialect 2 domain (07_substance_use) criteria include examples."""
+        data = domains.get("substance_use_intoxication_overdose_withdrawal")
+        assert data is not None
+        criteria = data["tier"]["criteria"]
+        for criterion in criteria:
+            assert "Examples" in criterion
+
     def test_file_count_on_disk(self):
-        """21 domain .txt files exist on disk."""
-        txt_files = sorted(DOMAINS_DIR.glob("*.txt"))
-        assert len(txt_files) == 21, f"Expected 21 domain files, found {len(txt_files)}"
-
-    def test_shared_files_skipped(self, templates):
-        """Files with '_shared' in the name should not appear in templates."""
-        for domain in templates:
-            assert "_shared" not in domain, f"_shared file leaked as domain: {domain}"
+        """21 domain .yaml files exist on disk."""
+        yaml_files = sorted(DOMAINS_DIR.glob("*.yaml"))
+        assert len(yaml_files) == 21, f"Expected 21 domain YAML files, found {len(yaml_files)}"
 
 
-class TestSharedFiles:
-    """Validate shared prompt files."""
+class TestSharedYAML:
+    """Validate shared Kev YAML config."""
 
-    def test_prelude_exists(self):
-        prelude = SHARED_DIR / "rubric_prelude.txt"
-        assert prelude.exists(), "rubric_prelude.txt not found"
-        content = prelude.read_text()
-        assert "Tier definitions" in content
+    @pytest.fixture
+    def shared(self):
+        with open(SHARED_FILE) as fh:
+            return yaml.safe_load(fh)
 
-    def test_schema_exists(self):
-        schema = SHARED_DIR / "output_schema.txt"
-        assert schema.exists(), "output_schema.txt not found"
-        content = schema.read_text()
-        assert "domain" in content
-        assert "tier" in content
+    def test_shared_loads(self, shared):
+        assert isinstance(shared, dict), "Shared YAML did not parse as dict"
 
-    def test_prelude_no_unknown_placeholders(self):
-        content = (SHARED_DIR / "rubric_prelude.txt").read_text()
-        found = set(re.findall(r"\$\w+", content))
-        assert not found, f"rubric_prelude.txt has unexpected placeholders: {found}"
+    def test_reading_rules_present(self, shared):
+        assert "reading_rules" in shared, "Missing reading_rules"
+        rules = shared["reading_rules"]
+        assert "Coded language" in rules or "coded" in rules.lower()
 
-    def test_schema_no_unknown_placeholders(self):
-        content = (SHARED_DIR / "output_schema.txt").read_text()
-        found = set(re.findall(r"\$\w+", content))
-        assert not found, f"output_schema.txt has unexpected placeholders: {found}"
+    def test_timing_is_choice(self, shared):
+        timing = shared.get("timing", {})
+        assert timing.get("type") == "choice", "Timing type must be 'choice'"
 
-
-class TestLLMTemplates:
-    """Validate consolidation and final_update LLM templates."""
-
-    def test_consolidation_loads_default(self):
-        prompt = load_consolidation_prompt()
-        assert prompt
-
-    def test_consolidation_has_expected_placeholders(self):
-        prompt = load_consolidation_prompt()
-        for placeholder in ("text", "context_block", "guard_block", "domain_block", "rule_block"):
-            assert f"${placeholder}" in prompt, f"Consolidation prompt missing ${placeholder}"
-
-    def test_final_update_loads_default(self):
-        prompt = load_final_update_prompt()
-        assert prompt
-
-    def test_final_update_has_expected_placeholders(self):
-        prompt = load_final_update_prompt()
-        for placeholder in ("text", "context_block", "guard_block", "domain_block", "rule_block", "consolidation_block"):
-            assert f"${placeholder}" in prompt, f"Final update prompt missing ${placeholder}"
-
-    def test_consolidation_builds_clean(self):
-        rendered = consolidation_build(
-            text="Sample text",
-            context_block="Age: 25",
-            guard_block="Guard results",
-            domain_block="Domain results",
-            rule_block="Rules applied",
+    def test_timing_has_six_options(self, shared):
+        criteria = shared.get("timing", {}).get("criteria", {})
+        expected = {
+            "historical_resolved",
+            "historical_unresolved",
+            "recent",
+            "current",
+            "imminent",
+            "unclear",
+        }
+        assert set(criteria.keys()) == expected, (
+            f"Timing criteria keys mismatch: got {set(criteria.keys())}"
         )
-        assert "Sample text" in rendered
-        assert not re.search(r"\$[A-Za-z_]", rendered), "Unresolved $ in consolidation prompt"
 
-    def test_final_update_builds_clean(self):
-        rendered = final_update_build(
-            text="Sample text",
-            context_block="Age: 25",
-            guard_block="Guard results",
-            domain_block="Domain results",
-            rule_block="Rules applied",
-            consolidation_block="Consolidated tier: yellow",
-        )
-        assert "Sample text" in rendered
-        assert "yellow" in rendered
-        assert not re.search(r"\$[A-Za-z_]", rendered), "Unresolved $ in final update prompt"
+    def test_flags_count(self, shared):
+        flags = shared.get("flags", {})
+        assert len(flags) == 9, f"Expected 9 flags, got {len(flags)}"
+
+    def test_flags_all_noul(self, shared):
+        for name, flag in shared.get("flags", {}).items():
+            assert flag.get("type") == "noul", f"Flag {name} type is not 'noul'"
+
+    def test_flags_match_vocabulary(self, shared):
+        expected_flags = {
+            "lethal_means_access",
+            "current_intoxication",
+            "alone_no_support",
+            "minor_abuse_disclosure",
+            "past_suicide_attempt",
+            "past_self_harm",
+            "past_sexual_assault",
+            "past_psychosis",
+            "past_eating_disorder",
+        }
+        actual = set(shared.get("flags", {}).keys())
+        assert actual == expected_flags, f"Flags mismatch: got {actual}"
+
+    def test_no_placeholder_variables(self, shared):
+        """No $text, $age, or $entry_date placeholders in shared YAML."""
+        with open(SHARED_FILE) as fh:
+            content = fh.read()
+        assert "$text" not in content, "Shared YAML contains $text placeholder"
+        assert "$age" not in content, "Shared YAML contains $age placeholder"
+        assert "$entry_date" not in content, "Shared YAML contains $entry_date placeholder"

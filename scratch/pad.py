@@ -129,8 +129,13 @@ def run_qwen_guard():
 
 
 reload_modules()
-res = domains.run(domains.read_sample_csv(100))
-domains.save(res, "domains_qwen3_4b_head100")
+res = domains.run(domains.read_sample_csv(100), runs=1)
+
+
+list(res["concerns"])
+
+
+domains.save(res, "domains_qwen3_4b_head100_next")
 
 # Re-adjudicate a saved JSON run without regenerating:
 # res = domains.adjudicate(domains.load("gated_qwen3_4b_head100_scoped"))

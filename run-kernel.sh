@@ -49,7 +49,7 @@ docker run \
   -e HOME=/tmp \
   -e HF_TOKEN="$HF_TOKEN" \
   -e JUPYTER_RUNTIME_DIR=/run/kernel \
-  -v hf-cache:/models \
+  -v /opt/dlami/nvme/hf-cache:/models \
   -v vllm-cache:/tmp/.cache/vllm \
   -v "$RUNTIME_DIR":/run/kernel \
   -v "$PWD:/app" \
