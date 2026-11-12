@@ -156,13 +156,14 @@ def load_kev_questions() -> dict[str, Any]:
 # ── Question builder ──────────────────────────────────────────────────────────
 
 
-def build_kev_questions(keq: dict[str, Any]) -> list[dict[str, Any]]:
-    """Assemble the Kev question list from loaded YAML config.
+def build_kev_questions(keq: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Assemble the Kev question dict from loaded YAML config.
 
     For each domain we emit a tier question and a timing question.
     Then we emit global flag questions.
+    Returns a dict keyed by question ID (no ``id`` field in values).
     """
-    questions: list[dict[str, Any]] = []
+    questions: dict[str, dict[str, Any]] = {}
     reading_rules = keq["reading_rules"]
     shared_timing = keq["timing"]
 
@@ -172,31 +173,28 @@ def build_kev_questions(keq: dict[str, Any]) -> list[dict[str, Any]]:
 
         # Tier question
         tier_instructions = tier["instructions"].replace("<reading_rules>", reading_rules)
-        questions.append({
-            "id": f"{slug}__tier",
+        questions[f"{slug}__tier"] = {
             "type": "score",
             "instructions": tier_instructions,
             "criteria": tier["criteria"],
-        })
+        }
 
         # Timing question
         timing_instructions = shared_timing["instructions"]
         if "timing_guidance" in domain:
             timing_instructions += "\n\nDomain-specific guidance:\n" + domain["timing_guidance"]
-        questions.append({
-            "id": f"{slug}__timing",
+        questions[f"{slug}__timing"] = {
             "type": "choice",
             "instructions": timing_instructions,
-            "criteria": list(shared_timing["criteria"].values()),
-        })
+            "criteria": shared_timing["criteria"],
+        }
 
     # Global flag questions
     for flag_name, flag_def in keq["flags"].items():
-        questions.append({
-            "id": f"flag__{flag_name}",
+        questions[f"flag__{flag_name}"] = {
             "type": "noul",
             "instructions": flag_def["instructions"],
-        })
+        }
 
     return questions
 

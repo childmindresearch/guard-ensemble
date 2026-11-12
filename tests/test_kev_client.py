@@ -123,31 +123,77 @@ class TestBuildKevQuestions:
     def test_question_count(self, keq: dict) -> None:
         # 21 domains * 2 (tier + timing) + 9 flags = 51
         questions = build_kev_questions(keq)
-        assert len(questions) == 21 * 2 + 9
+        assert len(questions) == 51
 
     def test_tier_questions_exist(self, keq: dict) -> None:
         questions = build_kev_questions(keq)
-        tier_ids = [q["id"] for q in questions if q["type"] == "score"]
+        tier_ids = [qid for qid, q in questions.items() if q["type"] == "score"]
         assert len(tier_ids) == 21
         for slug in (d["domain"] for d in keq["domains"]):
             assert f"{slug}__tier" in tier_ids
 
     def test_timing_questions_exist(self, keq: dict) -> None:
         questions = build_kev_questions(keq)
-        timing_ids = [q["id"] for q in questions if q["type"] == "choice"]
+        timing_ids = [qid for qid, q in questions.items() if q["type"] == "choice"]
         assert len(timing_ids) == 21
 
     def test_flag_questions_exist(self, keq: dict) -> None:
         questions = build_kev_questions(keq)
-        flag_ids = [q["id"] for q in questions if q["type"] == "noul"]
+        flag_ids = [qid for qid, q in questions.items() if q["type"] == "noul"]
         assert len(flag_ids) == 9
 
     def test_reading_rules_injected(self, keq: dict) -> None:
         questions = build_kev_questions(keq)
-        tier_qs = [q for q in questions if q["type"] == "score"]
+        tier_qs = [q for q in questions.values() if q["type"] == "score"]
         for q in tier_qs:
             assert "<reading_rules>" not in q["instructions"]
             assert keq["reading_rules"] in q["instructions"]
+
+
+class TestKevPayloadContract:
+    """Enforce that the Kev /v1/systemone request payload matches upstream schema."""
+
+    def test_questions_is_dict(self, keq: dict) -> None:
+        questions = build_kev_questions(keq)
+        assert isinstance(questions, dict)
+        assert len(questions) == 51
+
+    def test_question_values_no_id_key(self, keq: dict) -> None:
+        for qid, q in build_kev_questions(keq).items():
+            assert "id" not in q, f"{qid} should not have 'id' key"
+
+    def test_tier_criteria_is_list_of_3(self, keq: dict) -> None:
+        questions = build_kev_questions(keq)
+        for qid, q in questions.items():
+            if qid.endswith("__tier"):
+                assert isinstance(q["criteria"], list)
+                assert len(q["criteria"]) == 3
+
+    def test_timing_criteria_is_dict_with_6_keys(self, keq: dict) -> None:
+        questions = build_kev_questions(keq)
+        for qid, q in questions.items():
+            if qid.endswith("__timing"):
+                assert isinstance(q["criteria"], dict)
+                assert set(q["criteria"].keys()) == TIMING_VOCABULARY
+
+    def test_payload_is_json_serializable(self, keq: dict) -> None:
+        import json
+        questions = build_kev_questions(keq)
+        payload = {
+            "state": {"entry_text": "test", "participant_age": 25, "entry_date": "2025-01-01"},
+            "model": "kev-latest",
+            "questions": questions,
+        }
+        json.dumps(payload)  # should not raise
+
+    def test_noul_questions_have_no_criteria_or_dict_criteria(self, keq: dict) -> None:
+        questions = build_kev_questions(keq)
+        for qid, q in questions.items():
+            if qid.startswith("flag__"):
+                assert q["type"] == "noul"
+                # criteria is optional for noul; if present must be dict
+                if "criteria" in q:
+                    assert isinstance(q["criteria"], dict)
 
 
 # ── Score decoder tests ──────────────────────────────────────────────────────
@@ -337,6 +383,7 @@ class TestRunKevDomains:
         assert captured["state"]["participant_age"] == SAMPLE_AGE
         assert captured["state"]["entry_date"] == SAMPLE_DATE
         assert captured["model"] == KEV_MODEL
+        assert isinstance(captured["questions"], dict)
         assert len(captured["questions"]) == 51
 
     def test_missing_answer_yields_unknown(self, keq: dict) -> None:

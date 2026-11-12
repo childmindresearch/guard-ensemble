@@ -827,8 +827,8 @@ def dry_run(
         from kev_client import build_kev_questions
         questions = build_kev_questions(keq)
         print(f"[kev] {len(questions)} questions loaded:")
-        for q in questions:
-            print(f"  - {q['id']} ({q['type']})")
+        for qid, q in questions.items():
+            print(f"  - {qid} ({q['type']})")
     except Exception as e:
         print(f"[kev] ERROR loading questions: {e}")
 
