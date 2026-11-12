@@ -67,6 +67,8 @@ Per-guard `*_BASE_URL` overrides let you route individual models to separate inf
 
   Set `KEV_DATE_FACTS=1` to enable date-aware reasoning (recommended for timing questions).
 
+For a tiered local setup walkthrough, see [LOCAL_SETUP.md](LOCAL_SETUP.md).
+
 ## Gated models
 
 Llama Guard 3 8B (llama3.1 license) and ShieldGemma 9B (Gemma license) require an `HF_TOKEN` and prior license acceptance on Hugging Face. Granite Guardian, Qwen3Guard, and the consolidation model are Apache-2.0 and ungated.
