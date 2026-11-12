@@ -1,0 +1,26 @@
+domain: risk_to_third_party
+title: Risk to a Third Party Disclosed by the Participant
+tier:
+  type: score
+  instructions: |
+    Rate the entry for risk to a third party disclosed by the participant. Use the tier definitions and examples below. Participant age and entry date are in the state.
+    <reading_rules>
+  criteria:
+    - |
+      Green: General concern about another person without risk content.
+      Examples:
+      - "My friend is stressed about exams."
+    - |
+      Yellow: Another identifiable person is described with Yellow-level content in any domain; participant is asked to keep another person's risk secret.
+      Examples:
+      - "My friend has been cutting and made me promise not to tell."
+      - "I think my little brother gets hit at home."
+    - |
+      Red: Another identifiable person is described with Red-level content in any domain.
+      Examples:
+      - "My best friend says she is going to kill herself this weekend."
+      - "A kid at school showed me a gun and a list of names."
+timing_guidance: |
+  Green: General concern without identifiable risk to another person.
+  Yellow: Another person's risk is described as recent or ongoing.
+  Red: Another person's risk is imminent or currently occurring.

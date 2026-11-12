@@ -1,4 +1,4 @@
-"""Linear risk-detection pipeline: guards -> custom prompts -> deterministic phases -> consolidation -> final update -> CSV."""
+"""Linear risk-detection pipeline: guards -> Kev domains -> deterministic phases -> consolidation -> final update -> CSV."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from string import Template
 from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
@@ -27,8 +26,6 @@ from rubric import (
     CANONICAL_DOMAINS,
     Tier,
     TIER_UNKNOWN,
-    load_domain_prompt_templates,
-    parse_domain_response,
 )
 from rules import (
     ESCALATION_FLAGS,
@@ -42,9 +39,10 @@ from rules import (
     _minimums,
     _unknown_floor,
 )
-from custom_prompts import (
-    run_domain_prompts,
-    CUSTOM_PROMPT_MAX_TOKENS,
+from kev_client import (
+    KEV_FLAG_THRESHOLD,
+    load_kev_questions,
+    run_kev_domains,
 )
 from deliberation import (
     consolidation_build,
@@ -223,94 +221,78 @@ def run_guards(texts: List[str]) -> List[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Custom prompt stage
+# Kev domain stage
 # ---------------------------------------------------------------------------
 
-def _caller(url: str, **kwargs):
-    """Default caller for custom prompts (network I/O).
-
-    Signature matches what custom_prompts._call_with_retry expects:
-    caller(url, json=body) -> response
-    """
-    body = kwargs.get("json", {}).copy()
-    model = body.get("model")
-    if not model:
-        raise ValueError("model is missing or blank in request body")
-    resp = requests.post(url, json=body, timeout=DMR_TIMEOUT)
-    resp.raise_for_status()
-    _log_raw("custom_prompt", body.get("messages", [{}])[0].get("content", "")[:200], resp.json())
-    return resp
-
-
-def run_custom_prompts_stage(
+def run_kev_domain_stage(
     df: pd.DataFrame,
-    templates: Dict[str, str],
-    custom_runs: int = 3,
-    custom_temperature: float = 0.3,
-    caller: Optional[Callable] = None,
-    url: Optional[str] = None,
-    model_id: Optional[str] = None,
+    keq: dict,
+    threshold: float | None = None,
 ) -> pd.DataFrame:
-    """Run custom domain prompts for each row.
+    """Run Kev domain assessment for each row.
 
-    Adds domain_results, domain_incomplete, custom_prompt_errors columns.
-    highest_domain_tier is computed deterministically in run_deterministic_phases.
+    Adds domain_results, domain_incomplete, custom_prompt_errors,
+    global_flags, and global_flag_probabilities columns.
     """
-    if caller is None:
-        caller = _caller
-    if model_id is None:
-        model_id = DELIBERATION_MODEL_ID
-    if url is None:
-        url = _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
-
     domain_results_list: List[dict] = []
     domain_incomplete_list: List[bool] = []
-    custom_errors_list: List[str] = []
+    kev_errors_list: List[str] = []
+    global_flags_list: List[list] = []
+    global_flag_probabilities_list: List[dict] = []
 
     for _, row in df.iterrows():
         text = row["text"]
-        age = str(row["age"])
+        age = int(row["age"])
         entry_date = str(row["entry_date"])
 
         try:
-            results = run_domain_prompts(
+            kev_result = run_kev_domains(
                 text=text,
                 age=age,
                 entry_date=entry_date,
-                templates=templates,
-                caller=caller,
-                url=url,
-                model_id=model_id,
-                runs=custom_runs,
-                temperature=custom_temperature,
+                keq=keq,
+                threshold=threshold if threshold is not None else KEV_FLAG_THRESHOLD,
             )
 
-            # Serialize to dict for JSON storage
+            # Serialize domain results (no evidence, no per-domain flags)
             serializable = {}
             all_errors: List[str] = []
-            for domain, result in results.items():
+            for domain, result in kev_result["domains"].items():
                 serializable[domain] = {
-                    "tier": result.tier,
-                    "timing": result.timing,
-                    "flags": result.flags,
-                    "evidence": result.evidence,
+                    "tier": result.get("tier", TIER_UNKNOWN),
+                    "timing": result.get("timing"),
+                    "tier_score": result.get("mean_score"),
+                    "tier_probabilities": result.get("probabilities", {}),
+                    "tier_confidence": result.get("confidence"),
+                    "tier_mode_probability": result.get("mode_probability"),
+                    "timing_probabilities": result.get("timing_probabilities", {}),
+                    "timing_confidence": result.get("timing_confidence"),
                 }
-                if result.errors:
-                    all_errors.extend(result.errors)
+                if "error" in result:
+                    all_errors.append(f"domain {domain}: {result['error']}")
 
             domain_results_list.append(serializable)
-            domain_incomplete_list.append(any(r.tier == TIER_UNKNOWN for r in results.values()))
-            custom_errors_list.append(";".join(all_errors) if all_errors else "")
+            domain_incomplete_list.append(
+                any(r.get("tier") == TIER_UNKNOWN for r in kev_result["domains"].values())
+                or len(kev_result["errors"]) > 0
+            )
+            kev_errors_list.append(";".join(kev_result["errors"]) if kev_result["errors"] else "")
+            global_flags_list.append(kev_result.get("global_flags", []))
+            global_flag_probabilities_list.append(kev_result.get("flag_probabilities", {}))
 
         except Exception as e:
             domain_results_list.append({})
             domain_incomplete_list.append(True)
-            custom_errors_list.append(f"custom_prompts_stage_error: {e}")
+            kev_errors_list.append(f"kev_domain_stage_error: {e}")
+            global_flags_list.append([])
+            global_flag_probabilities_list.append({})
 
     df = df.copy()
     df["domain_results"] = domain_results_list
     df["domain_incomplete"] = domain_incomplete_list
-    df["custom_prompt_errors"] = custom_errors_list
+    df["custom_prompt_errors"] = kev_errors_list
+    df["global_flags"] = global_flags_list
+    df["global_flag_probabilities"] = global_flag_probabilities_list
     return df
 
 
@@ -339,6 +321,7 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
     """Run deterministic rule phases: highest -> escalation -> minimums -> unknown floor -> floor.
 
     Uses domain_results JSON to extract domain tiers and flags.
+    Also reads global_flags and unions them with any per-domain flags.
     Computes and writes domain_incomplete, highest_domain_tier, and floor_reasons.
     """
     escalated_tiers: List[str] = []
@@ -358,7 +341,7 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
             except (json.JSONDecodeError, TypeError):
                 domain_results = {}
 
-        # Read stage-level incompleteness from custom prompts stage
+        # Read stage-level incompleteness from Kev domain stage
         stage_domain_incomplete = bool(row.get("domain_incomplete", False))
 
         # Build domain_tiers dict: domain -> Tier or None
@@ -369,11 +352,21 @@ def run_deterministic_phases(df: pd.DataFrame) -> pd.DataFrame:
             if isinstance(data, dict):
                 tier_str = data.get("tier", TIER_UNKNOWN)
                 domain_tiers[domain] = _tier_to_int(tier_str)
+                # Per-domain flags if present (legacy compatibility)
                 flags = data.get("flags", [])
                 if isinstance(flags, list):
                     all_flags.update(flags)
             else:
                 domain_tiers[domain] = None
+
+        # Union global_flags with per-domain flags
+        global_flags = row.get("global_flags", [])
+        if isinstance(global_flags, list):
+            for gf in global_flags:
+                if isinstance(gf, dict) and gf.get("flagged"):
+                    flag_name = gf.get("name", "")
+                    if flag_name:
+                        all_flags.add(flag_name)
 
         # Phase 1: highest_tier
         ht_result = highest_tier(domain_tiers)
@@ -449,7 +442,7 @@ def _build_guard_block(row) -> str:
 
 
 def _build_domain_block(row) -> str:
-    """Build domain block from domain_results."""
+    """Build domain block from domain_results with tier, timing, confidence."""
     domain_results = row.get("domain_results", {})
     if isinstance(domain_results, str):
         try:
@@ -460,7 +453,11 @@ def _build_domain_block(row) -> str:
     lines = []
     for domain, data in domain_results.items():
         if isinstance(data, dict):
-            lines.append(f"{domain}: tier={data.get('tier', 'unknown')}, timing={data.get('timing', 'unknown')}, flags={data.get('flags', [])}")
+            tier = data.get("tier", "unknown")
+            timing = data.get("timing", "unknown")
+            confidence = data.get("tier_confidence")
+            conf_str = f"{confidence}" if confidence is not None else "None"
+            lines.append(f"{domain}: tier={tier}, timing={timing}, confidence={conf_str}")
     return "\n".join(lines) if lines else "No domain data available"
 
 
@@ -603,6 +600,8 @@ OUTPUT_COLUMNS = [
     "id", "text", "participant_id", "age", "entry_date",
     # Guard columns added dynamically
     "domain_results",
+    "global_flags",
+    "global_flag_probabilities",
     "highest_domain_tier",
     "escalated_tier",
     "escalation_reasons",
@@ -685,6 +684,8 @@ def _assemble_output_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Final column order
     final_cols = base_cols + guard_cols + [
         "domain_results",
+        "global_flags",
+        "global_flag_probabilities",
         "highest_domain_tier",
         "escalated_tier",
         "escalation_reasons",
@@ -717,40 +718,27 @@ def _assemble_output_columns(df: pd.DataFrame) -> pd.DataFrame:
 def run(
     input_df: pd.DataFrame,
     output_path: str,
-    custom_prompts_dir: str = "prompts/domains",
-    custom_runs: int = 3,
-    custom_temperature: float = 0.3,
+    keq: dict,
     consolidation_prompt: Optional[str] = None,
     final_update_prompt: Optional[str] = None,
     guards_only: bool = False,
-    caller: Optional[Callable] = None,
+    threshold: float | None = None,
 ) -> pd.DataFrame:
-    """Run the full pipeline: guards -> custom prompts -> deterministic -> consolidation -> final -> CSV.
+    """Run the full pipeline: guards -> Kev domains -> deterministic -> consolidation -> final -> CSV.
 
     Args:
         input_df: DataFrame with columns id, text, age, entry_date (optional participant_id).
         output_path: Path for output CSV.
-        custom_prompts_dir: Directory containing domain prompt files.
-        custom_runs: Number of runs per domain.
-        custom_temperature: Temperature for custom prompt calls.
+        keq: Pre-loaded Kev question config from kev_client.load_kev_questions().
         consolidation_prompt: Custom consolidation prompt template.
         final_update_prompt: Custom final update prompt template.
-        guards_only: If True, skip custom prompts, deterministic, consolidation, final stages.
-        caller: Optional caller function for custom prompts.
+        guards_only: If True, skip Kev, deterministic, consolidation, final stages.
     """
     # Validate input
     input_df = validate_input(input_df)
 
     # Resolve LLM endpoint for deliberation stages
     llm_url = _join_url(DELIBERATION_BASE_URL, DELIBERATION_PATH)
-
-    # Load prompts
-    shared_dir = str(Path(__file__).parent / "prompts" / "_shared")
-    templates = load_domain_prompt_templates(
-        custom_prompts_dir,
-        f"{shared_dir}/rubric_prelude.txt",
-        f"{shared_dir}/output_schema.txt",
-    )
 
     # Stage 1: Guards
     guard_rows = run_guards(input_df["text"].tolist())
@@ -764,8 +752,9 @@ def run(
     # If guards-only, skip remaining stages
     if guards_only:
         # Fill in empty values for remaining columns
-        for col in ["domain_results", "highest_domain_tier", "escalated_tier",
-                     "escalation_reasons", "minimum_tier", "minimum_reasons",
+        for col in ["domain_results", "global_flags", "global_flag_probabilities",
+                     "highest_domain_tier", "escalated_tier", "escalation_reasons",
+                     "minimum_tier", "minimum_reasons",
                      "floor_tier", "floor_reasons", "consolidated_tier", "consolidation_rationale",
                      "final_tier", "final_rationale", "final_adjusted",
                      "final_risk", "domain_incomplete", "custom_prompt_errors",
@@ -791,11 +780,8 @@ def run(
         df.to_csv(output_path, index=False)
         return df
 
-    # Stage 2: Custom prompts
-    df = run_custom_prompts_stage(
-        df, templates, custom_runs, custom_temperature,
-        caller=caller, url=llm_url, model_id=DELIBERATION_MODEL_ID
-    )
+    # Stage 2: Kev domains
+    df = run_kev_domain_stage(df, keq=keq, threshold=threshold)
 
     # Stage 3: Deterministic phases
     df = run_deterministic_phases(df)
@@ -818,13 +804,13 @@ def run(
 
 def dry_run(
     input_df: pd.DataFrame,
-    custom_prompts_dir: str = "prompts/domains",
+    kev_questions_dir: Optional[str] = None,
     consolidation_prompt_path: Optional[str] = None,
     final_update_prompt_path: Optional[str] = None,
 ) -> None:
     """Print all prompts without making any network calls.
 
-    Prints guard prompts, one render per domain prompt, consolidation/final prompts.
+    Prints guard prompts, assembled Kev questions, consolidation/final prompts.
     """
     # Guard prompts (first row only for brevity)
     for guard in GUARDS:
@@ -835,21 +821,16 @@ def dry_run(
         else:
             print(f"[{guard.name}] {prompt}")
 
-    # Load domain templates
-    shared_dir = str(Path(__file__).parent / "prompts" / "_shared")
-    templates = load_domain_prompt_templates(
-        custom_prompts_dir,
-        f"{shared_dir}/rubric_prelude.txt",
-        f"{shared_dir}/output_schema.txt",
-    )
-
-    # Domain prompts (one render per domain, first row)
-    text = input_df.iloc[0]["text"]
-    age = str(input_df.iloc[0]["age"])
-    entry_date = str(input_df.iloc[0]["entry_date"])
-    for domain, template in templates.items():
-        rendered = Template(template).substitute(text=text, age=age, entry_date=entry_date, scores_block="")
-        print(f"[domain:{domain}] {rendered}")
+    # Load and print Kev questions
+    try:
+        keq = load_kev_questions()
+        from kev_client import build_kev_questions
+        questions = build_kev_questions(keq)
+        print(f"[kev] {len(questions)} questions loaded:")
+        for qid, q in questions.items():
+            print(f"  - {qid} ({q['type']})")
+    except Exception as e:
+        print(f"[kev] ERROR loading questions: {e}")
 
     # Consolidation prompt (build with placeholder blocks)
     if consolidation_prompt_path:
@@ -858,8 +839,8 @@ def dry_run(
     else:
         cons_template = load_consolidation_prompt()
     cons_rendered = consolidation_build(
-        text=text,
-        context_block=f"Entry ID: {input_df.iloc[0].get('id', 0)}, Age: {age}",
+        text=input_df.iloc[0]["text"],
+        context_block=f"Entry ID: {input_df.iloc[0].get('id', 0)}, Age: {input_df.iloc[0]['age']}",
         guard_block="Guard results placeholder",
         domain_block="Domain results placeholder",
         rule_block="Rule context placeholder",
@@ -874,8 +855,8 @@ def dry_run(
     else:
         final_template = load_final_update_prompt()
     final_rendered = final_update_build(
-        text=text,
-        context_block=f"Entry ID: {input_df.iloc[0].get('id', 0)}, Age: {age}",
+        text=input_df.iloc[0]["text"],
+        context_block=f"Entry ID: {input_df.iloc[0].get('id', 0)}, Age: {input_df.iloc[0]['age']}",
         guard_block="Guard results placeholder",
         domain_block="Domain results placeholder",
         rule_block="Rule context placeholder",
@@ -951,11 +932,14 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Print prompts only")
     parser.add_argument("--demo", action="store_true", help="Use demo data")
     parser.add_argument("--guards-only", action="store_true", help="Run guards only, skip remaining stages")
-    parser.add_argument("--custom-prompts-dir", default="prompts/domains", help="Directory for domain prompt files")
-    parser.add_argument("--custom-runs", type=int, default=3, help="Number of runs per domain prompt")
-    parser.add_argument("--custom-temperature", type=float, default=0.3, help="Temperature for custom prompts")
     parser.add_argument("--consolidation-prompt", default=None, help="Path to custom consolidation prompt template")
     parser.add_argument("--final-update-prompt", default=None, help="Path to custom final update prompt template")
+    # Kev-specific CLI flags
+    parser.add_argument("--kev-base-url", default=None, help="Kev API base URL (default: from KEV_BASE_URL env)")
+    parser.add_argument("--kev-model", default=None, help="Kev model ID (default: from KEV_MODEL env)")
+    parser.add_argument("--kev-timeout", type=int, default=None, help="Kev request timeout in seconds")
+    parser.add_argument("--kev-flag-threshold", type=float, default=None, help="Threshold for flagging global flags")
+    parser.add_argument("--kev-questions-dir", default=None, help="Directory for Kev question YAML files")
     args = parser.parse_args()
 
     if args.input is None:
@@ -978,14 +962,34 @@ def main():
         if col_map:
             input_df = input_df.rename(columns=col_map)
 
+    # Apply Kev env overrides from CLI
+    if args.kev_base_url:
+        import kev_client
+        kev_client.KEV_BASE_URL = args.kev_base_url
+    if args.kev_model:
+        import kev_client
+        kev_client.KEV_MODEL = args.kev_model
+    if args.kev_timeout is not None:
+        import kev_client
+        kev_client.KEV_TIMEOUT = args.kev_timeout
+    if args.kev_flag_threshold is not None:
+        import kev_client
+        kev_client.KEV_FLAG_THRESHOLD = args.kev_flag_threshold
+    if args.kev_questions_dir:
+        import kev_client
+        kev_client.KEV_DIR = Path(args.kev_questions_dir)
+
     if args.dry_run:
         dry_run(
             input_df,
-            custom_prompts_dir=args.custom_prompts_dir,
+            kev_questions_dir=args.kev_questions_dir,
             consolidation_prompt_path=args.consolidation_prompt,
             final_update_prompt_path=args.final_update_prompt,
         )
         return
+
+    # Load Kev questions
+    keq = load_kev_questions()
 
     # Load custom prompts if paths provided
     consolidation_prompt = None
@@ -1007,12 +1011,11 @@ def main():
     df = run(
         input_df,
         args.output,
-        custom_prompts_dir=args.custom_prompts_dir,
-        custom_runs=args.custom_runs,
-        custom_temperature=args.custom_temperature,
+        keq=keq,
         consolidation_prompt=consolidation_prompt,
         final_update_prompt=final_update_prompt,
         guards_only=args.guards_only,
+        threshold=args.kev_flag_threshold,
     )
     _summary(df)
 

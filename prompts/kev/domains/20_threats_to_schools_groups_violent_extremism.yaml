@@ -1,0 +1,26 @@
+domain: threats_to_schools_groups_violent_extremism
+title: Threats to Schools, Groups, and Violent Extremism
+tier:
+  type: score
+  instructions: |
+    Rate the entry for threats to schools or groups and violent extremism. Use the tier definitions and examples below. Participant age and entry date are in the state.
+    <reading_rules>
+  criteria:
+    - |
+      Green: Discussion of news events, school safety drills, or history without personal identification or intent.
+      Examples:
+      - "We had a lockdown drill today and it was scary."
+    - |
+      Yellow: Interest in, admiration of, or identification with perpetrators of mass attacks; consuming or sharing extremist or violent-ideology content with personal endorsement; grievance against a school, group, or institution with vague threats; dehumanizing language about a group; hints that something will happen ("leakage").
+      Examples:
+      - "Honestly I get why he did it."
+      - "Do not come to school Friday."
+    - |
+      Red: Specific threat to a school, event, or group; planning, a list of targets, a timeframe, or weapon acquisition or practice; any mention of bringing a weapon to school, even if framed as a joke; stated intent to join or prepare violent action with an extremist group.
+      Examples:
+      - "I am bringing my dad's gun on Monday, just kidding."
+      - "I have a list of who deserves it."
+timing_guidance: |
+  Green: Discussion of past events, drills, or news without personal intent or identification.
+  Yellow: Current interest or identification with perpetrators; vague threats or "leakage" at the time of writing.
+  Red: Specific threats, planning, or weapon acquisition underway or imminent.
