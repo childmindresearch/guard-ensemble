@@ -1,0 +1,95 @@
+# Domain: Harm to Self
+
+Rate the entry for harm to self. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers suicidal thoughts and behavior and self-injury, by the writer or by another person the writer describes. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- Intent or threats to harm other people: Harm to Others.
+- The writer or someone else being mistreated, abused, exploited, or bullied: Victim of Harm.
+- Harmful advice or encouragement from an AI: AI-Related Safety Risk.
+
+Grief, low mood, eating or weight concerns, and substance use are not harm to self unless the entry also describes suicidal thoughts or self-injury. Drinking, blackouts, and driving while drunk or high are rated in Harm to Others, not here. A dare or stunt that put the writer's life at risk is Yellow (see below) even without a wish to be hurt.
+
+A history of suicidal thoughts or self-injury is Yellow even when the writer describes it as long ago, resolved, or overcome.
+
+## Tier Definitions
+
+### Green: Okay
+Ordinary negative emotions (e.g., sadness, stress, frustration) or figurative, hyperbolic, or joking references to death, with no expressed wish to die and no reference to self-injury.
+Also Green (added, pending clinician review): grief or missing someone who died, without a wish to die or to be with them.
+
+**Examples about the writer:**
+- "I failed my chem test and I feel awful."
+- "I'm literally dying of embarrassment lol."
+- "Been down since the breakup but talking to Maya helped."
+
+**Examples about a third party:**
+- "My friend was really stressed about finals."
+
+### Yellow: Concern
+Elevated risk without evidence of current intent or imminence: passive suicidal ideation (a wish to be dead without intent to act), hopelessness or perceived burdensomeness, urges to self-injure without reported action, or a history of suicidal thoughts or self-injury with no indication of current intent.
+Also Yellow (added, pending clinician review): hearing voices, believing others can hear or control one's thoughts, or other loss of touch with reality; a dare, stunt, or challenge that put the writer's life at serious risk, such as a near-drowning, a fall, or a choking game, even with no stated wish to be hurt (this does not include drinking or drunk driving).
+
+**Examples about the writer:**
+- "Sometimes I wish I could go to sleep and not wake up."
+- "Everyone would be better off without me."
+- "I used to cut in 8th grade and I've been thinking about it again."
+
+**Examples about a third party:**
+- "Jordan said he sometimes wishes he wasn't alive."
+- "My friend showed me scars from last year."
+
+### Red: Risk
+Current or imminent risk: active suicidal ideation (thoughts of killing oneself) with a plan, intent, access to means, or timeline; preparatory behavior; a recent or ongoing suicide attempt; or current self-injury, especially injury that may require medical care.
+
+Preparatory behavior includes researching a method or a lethal dose, for example looking up how much of a medication would be fatal, even when the writer states no intent (added, pending clinician review). A goodbye message is also Red, including a veiled one such as saying the writer may not be around soon or telling people it is not their fault, as is hearing voices that tell the writer to harm themselves (added, pending clinician review). These are tier criteria, not flags.
+
+Red requires at least one of: a plan or method, a stated intent to act, access to means, or a time. Wanting to die, however intense, long-standing, or repeated, is Yellow when none of these is present, and so is a long entry about despair that never states what the writer will do or when. A stated time is Red even when indirect, for example "in an hour", "tonight", "I won't be here tomorrow", "soon I'll be with her again" (added, pending clinician review).
+
+**Examples about the writer:**
+- "I've decided I'm doing it this weekend when my parents are away."
+- "I've been saving up my pills."
+- "I googled what dose of my meds would kill someone my size."
+- "I wrote goodbye letters tonight."
+- "I cut deeper than usual last night and it won't stop bleeding."
+- "If I'm not around after Friday, it's not on you guys."
+- "Long rant about my job, my ex, and my debt, ending with: by the time anyone reads this I'll be gone, I've got the rope in the car." (Red: a time and a means, even though most of the entry is about other things)
+
+**Yellow, not Red, for contrast:**
+- "I've wanted to die every day for years. I hate waking up. I don't know how much longer I can do this." (no plan, intent to act, means, or time)
+- "I still want to die but I won't kill myself, I'm too much of a coward." (wish to die with intent not to act)
+
+**Examples about a third party:**
+- "Sam texted me goodbye and isn't answering."
+- "My friend told me she has a plan to kill herself and made me promise not to tell."
+
+## Criteria
+
+The criterion field must be exactly one of these names. The tier is the one listed with it.
+
+- green: No suicidal thoughts or self-injury
+- yellow: Wish to be dead with no plan, time, method, or intent to act
+- yellow: Hopelessness or perceived burdensomeness
+- yellow: Urges to self-injure without reported action
+- yellow: History of suicidal thoughts or self-injury
+- yellow: Hearing voices or loss of touch with reality
+- yellow: Life-threatening dare, stunt, or challenge
+- red: Suicidal ideation with a stated or implied time (tonight, soon, this week)
+- red: Suicidal ideation with a method or plan, including slow methods such as starving
+- red: Stated intent to act on suicidal thoughts, even if hesitant
+- red: Suicidal ideation with access to means
+- red: Preparatory behavior, including researching a method or dose
+- red: Recent, aborted, or near suicide attempt
+- red: Ongoing suicide attempt
+- red: Current self-injury
+- red: Goodbye message, including a veiled one
+- red: Voices telling the writer to harm themselves
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

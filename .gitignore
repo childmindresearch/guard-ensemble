@@ -8,3 +8,6 @@ scores_*.csv
 raw_responses.jsonl
 /.typings
 /scratch/logs
+/.clj-kondo
+/.lsp/.cache
+/.nrepl-port

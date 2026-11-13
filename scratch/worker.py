@@ -7,6 +7,8 @@ Started by scratch.runner as:
 Protocol: one JSON object per line.
   worker -> parent, once:   {"ok": true, "ready": true}  or  {"ok": false, "error": "..."}
   parent -> worker:         {"mode": "chat"|"generate", "inputs": [...], "sampling": {...}}
+                            sampling may include "json_schema": a JSON schema the
+                            output is constrained to (vLLM structured outputs).
   worker -> parent:         {"ok": true, "result": [[completion, ...], ...]}  or  {"ok": false, "error": "..."}
 
 A completion is the generated text, or, when sampling includes "logprobs",
@@ -34,6 +36,22 @@ from scratch.models import MODEL_KEY, MODELS
 # *.jinja: newer HF repos ship the chat template as chat_template.jinja
 # instead of inside tokenizer_config.json.
 DEFAULT_ALLOW_PATTERNS = ["*.json", "*.safetensors", "*.jinja"]
+
+
+def _structured(schema: dict | None) -> dict:
+    """SamplingParams kwargs that constrain decoding to a JSON schema.
+    `json_schema` in a request's sampling dict is translated here because the
+    vLLM params object can't travel over the JSON protocol."""
+    if schema is None:
+        return {}
+    try:  # vLLM >= 0.11
+        from vllm.sampling_params import StructuredOutputsParams
+
+        return {"structured_outputs": StructuredOutputsParams(json=schema)}
+    except ImportError:  # older vLLM
+        from vllm.sampling_params import GuidedDecodingParams
+
+        return {"guided_decoding": GuidedDecodingParams(json=schema)}
 
 
 def serve(model: MODEL_KEY) -> None:
@@ -66,7 +84,9 @@ def serve(model: MODEL_KEY) -> None:
     for line in sys.stdin:
         try:
             req = json.loads(line)
-            params = SamplingParams(**req["sampling"])
+            sampling = dict(req["sampling"])
+            schema = sampling.pop("json_schema", None)
+            params = SamplingParams(**sampling, **_structured(schema))
             if req["mode"] == "chat":
                 outs = llm.chat(
                     req["inputs"],

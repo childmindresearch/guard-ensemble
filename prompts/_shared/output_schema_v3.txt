@@ -1,0 +1,34 @@
+# OUTPUT SCHEMA
+
+Respond with a single JSON object with exactly these fields, in this order. The criterion and quotes come before the tier, so that the tier follows from them.
+
+## Fields
+
+- **domain** (string): The domain slug being rated.
+- **criterion** (string): One name from this domain's Criteria list, copied exactly. Choose the criterion the entry meets; if none is met, choose the Green one.
+- **quotes** (array of strings): The words from the entry that meet the criterion. At most two quotes, each a short phrase copied from the entry, never the whole entry. If the criterion requires a plan, intent to act, means, or timeline, the quotes must show it. Empty when no criterion is met.
+- **tier** (string): The tier of the criterion chosen above, as listed in the Criteria list.
+- **timing** (string): One of "historical_resolved", "historical_unresolved", "recent", "current", "imminent", or "unclear".
+- **flags** (array of strings): Zero or more flags from the allowed list below; [] if none applies.
+  - Escalation flags: "lethal_means_access", "current_intoxication", "alone_no_support"
+  - Minimum-rating flags: "minor_abuse_disclosure", "past_suicide_attempt", "past_self_harm", "past_sexual_assault", "past_psychosis", "past_eating_disorder"
+
+## Examples
+
+{
+  "domain": "harm_to_self",
+  "criterion": "History of suicidal thoughts or self-injury",
+  "quotes": ["used to cut", "thinking about it again"],
+  "tier": "yellow",
+  "timing": "historical_unresolved",
+  "flags": ["past_self_harm"]
+}
+
+{
+  "domain": "victim_of_harm",
+  "criterion": "No maltreatment or victimization",
+  "quotes": [],
+  "tier": "green",
+  "timing": "unclear",
+  "flags": []
+}

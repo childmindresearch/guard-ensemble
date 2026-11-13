@@ -46,6 +46,7 @@ docker run \
   --entrypoint jupyter \
   --user "$(id -u):$(id -g)" \
   --gpus all \
+  --network host \
   -e HOME=/tmp \
   -e HF_TOKEN="$HF_TOKEN" \
   -e JUPYTER_RUNTIME_DIR=/run/kernel \

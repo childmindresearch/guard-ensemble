@@ -6,6 +6,8 @@ MODEL_KEY = Literal[
     "granite_guardian",
     "qwen_guard",
     "qwen3_4b",
+    "qwen3_4b_2507",
+    "gemma3_4b",
     "qwen3_8b",
 ]
 
@@ -52,9 +54,30 @@ MODELS: dict[MODEL_KEY, dict] = {
         # disable_log_stats=False: periodic scheduler stats in the log (running /
         # waiting requests, KV cache usage, prefix cache hit rate).
         "llm_kwargs": {
-            "max_model_len": 16384,
+            "max_model_len": 8192,
             "disable_log_stats": False,
             "max_num_seqs": 512,
+        },
+    },
+    # Qwen3-4B retrained for non-thinking use (July 2025): better instruction
+    # following than qwen3_4b with enable_thinking=False. Drop-in replacement.
+    "qwen3_4b_2507": {
+        "repo": "Qwen/Qwen3-4B-Instruct-2507",
+        "llm_kwargs": {
+            "max_model_len": 8192,
+            "disable_log_stats": False,
+            "max_num_seqs": 512,
+        },
+    },
+    # A different model family at the same size, for uncorrelated errors.
+    # Multimodal checkpoint used text-only; no system role in its chat template.
+    "gemma3_4b": {
+        "repo": "google/gemma-3-4b-it",
+        "llm_kwargs": {
+            "max_model_len": 8192,
+            "limit_mm_per_prompt": {"image": 0},
+            "disable_log_stats": False,
+            "max_num_seqs": 256,
         },
     },
     # Same role as qwen3_4b, to test whether a larger model follows "rate only

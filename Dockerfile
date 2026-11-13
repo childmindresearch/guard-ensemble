@@ -17,7 +17,7 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir vllm huggingface_hub
 
-RUN pip install --no-cache-dir pandas jupyter_server ipykernel
+RUN pip install --no-cache-dir requests pandas jupyter_server ipykernel
 
 ENV HF_HOME=/models
 ENV VLLM_USE_FLASHINFER_SAMPLER=0

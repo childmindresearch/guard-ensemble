@@ -1,0 +1,73 @@
+# Domain: Harm to Others
+
+Rate the entry for harm to others. Use the tier definitions and examples below to assign Green, Yellow, or Red.
+
+## Scope
+
+This domain covers thoughts, threats, plans, or acts of violence toward other people, by the writer or by another person the writer describes. It includes harm the writer intends toward family members, peers, or anyone else. Rate Green if the entry has no such content, even if it describes other risks; these are rated in their own domains:
+- Suicidal thoughts or self-injury: Harm to Self.
+- The writer or someone else being mistreated, abused, exploited, or bullied: Victim of Harm.
+- Harmful advice or encouragement from an AI: AI-Related Safety Risk.
+
+## Tier Definitions
+
+### Green: Okay
+Anger or frustration toward others, figurative or joking statements about harming someone, or engagement with violence in games, media, or fiction, with no expressed intent to harm a real person.
+
+**Examples about the writer:**
+- "My brother is so annoying I could kill him lol."
+- "I was so mad at my coach today."
+- "Played Call of Duty all night."
+
+**Examples about a third party:**
+- "My friend was furious at her ex."
+
+### Yellow: Concern
+Potential for violence without a specific plan or imminence: thoughts or fantasies of harming a person, vague or conditional threats, notable preoccupation with violence or past attacks, or reports of past violent behavior.
+Also Yellow (added, pending clinician review): having driven, or regularly driving, after drinking or drug use.
+
+**Examples about the writer:**
+- "Sometimes I imagine hurting the kids who bully me."
+- "If he touches my stuff again I'll make him regret it."
+- "I've been watching a lot of videos about school shootings."
+- "Got in a fight and punched someone."
+
+**Examples about a third party:**
+- "Kevin keeps saying everyone at school deserves what's coming."
+
+### Red: Risk
+Current or imminent risk of violence: a threat toward an identifiable target with a plan, means, or timeline; access to weapons in the context of intent to harm; or evidence of attack planning (e.g., target lists).
+Also Red (added, pending clinician review): driving, or about to drive, while drunk or high.
+
+**Examples about the writer:**
+- "I know where my dad keeps his gun and I'm bringing it to school Monday."
+- "I made a list of who I'm going to hurt."
+- "Tomorrow I'm making her pay. I already have the knife."
+- "Had like six beers and I'm driving back now."
+
+**Examples about a third party:**
+- "Alex showed me a gun in his backpack and said Friday is the day."
+- "My friend posted a list of people he wants to kill."
+
+## Criteria
+
+The criterion field must be exactly one of these names. The tier is the one listed with it.
+
+- green: No intent or threat to harm others
+- yellow: Thoughts or fantasies of harming a person
+- yellow: Vague or conditional threat
+- yellow: Preoccupation with violence or past attacks
+- yellow: Report of past violent behavior
+- yellow: Driving after drinking or drug use
+- red: Threat toward an identifiable target with a plan, means, or timeline
+- red: Access to weapons with intent to harm
+- red: Evidence of attack planning
+- red: Driving, or about to drive, while drunk or high
+
+## Input
+
+Entry text:
+$text
+
+Participant age: $age
+Entry date: $entry_date

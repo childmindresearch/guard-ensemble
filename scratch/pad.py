@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 
 from scratch import domains, lib, models, runner, shieldgemma
@@ -22,6 +24,10 @@ def reload_modules():
 
 def read_sample_csv():
     return pd.read_csv("data/sample_inputs.csv")
+
+
+def read_labelled_csv():
+    return pd.read_csv("labelled_data/clinician_inputs.csv")
 
 
 ## Programs --------------------------------------------------------------------
@@ -127,15 +133,136 @@ def run_qwen_guard():
 
 #### Domains: gate -> scoped JSON -> adjudicate (scratch/domains.py)
 
+from collections.abc import Hashable
+from typing import Any, cast
 
 reload_modules()
-res = domains.run(domains.read_sample_csv(100), runs=1)
+
+runner.stop()
+
+data = domains.read_sample_csv(path="labelled_data/clinician_inputs.csv")
+
+domains.MODEL = "gemma3_4b"
+
+res = domains.run(data)
+
+domains.save(res, "key_domains_gemma3_4b_labelled_0001")
+
+# ---
 
 
-list(res["concerns"])
+def as_df(v: Any) -> pd.DataFrame:
+    return cast(pd.DataFrame, v)
 
 
-domains.save(res, "domains_qwen3_4b_head100_next")
+def select_results(domains_out: pd.DataFrame) -> list[dict[Hashable, Any]]:
+    selected = as_df(domains_out[["text", "domain_results"]])
+    return selected.to_dict("records")
+
+
+select_results(res)
+
+
+false_ai_flags_ = {
+    (text, risks, json.dumps(drs))
+    for text, risks, drs in [
+        (
+            r["text"],
+            frozenset(
+                [
+                    (k, v["tier"])
+                    for k, v in dict.items(r["domain_results"])
+                    if v["tier"] != "green"
+                ]
+            ),
+            {**r["domain_results"]},
+        )
+        for r in res.to_dict("records")
+    ]
+    if "04_ai_related_safety_risk" in {k for k, v in risks}
+    and "My chatbot is the only one" not in text
+}
+
+false_ai_flags = [
+    {"text": text, "risks": list(risks), "domain_results": json.loads(drs)}
+    for text, risks, drs in false_ai_flags_
+]
+
+print(json.dumps({(f["text"], f["risks"]) for f in false_ai_flags}))
+
+
+def serialize_sets(obj):
+    if isinstance(obj, set):
+        return [*obj]
+    return obj
+
+
+with open("out/false_ai_flags.json", "w") as f:
+    json.dump(false_ai_flags, f, indent=2, default=tuple, ensure_ascii=False)
+
+
+# ---
+
+res.to_dict("records")
+
+rs = pd.DataFrame(
+    [
+        {
+            "text": "If I'm not here next week, it's not anyone's fault.",
+            "age": "17",
+            "entry_date": "2025-01-27",
+        }
+    ]
+)
+res2 = domains.run(rs, runs=1)
+
+[
+    {
+        "text": r["text"],
+        "concerns": [
+            (k, v["tier"], v)
+            for k, v in dict.items(r["domain_results"])
+            if v["tier"] != "green"
+        ],
+    }
+    for r in cast(pd.DataFrame, res2[["text", "domain_results"]]).to_dict("records")
+]
 
 # Re-adjudicate a saved JSON run without regenerating:
 # res = domains.adjudicate(domains.load("gated_qwen3_4b_head100_scoped"))
+
+
+#### Kev Experimentation
+
+import importlib
+from concurrent.futures import ThreadPoolExecutor
+
+import kev_client
+
+importlib.reload(kev_client)
+
+keq = kev_client.load_kev_questions()
+
+result = kev_client.run_kev_domains(
+    "I don't want to be here anymore", 19, "2025-01-11", keq
+)
+
+dict.keys(result["response"])
+
+{key: result["response"][key] for key in ["usage", "latency_ms"]}
+
+
+def run_kev_domains_many(rows, keq, concurrency=16):
+    def one(row):
+        return kev_client.run_kev_domains(
+            row["text"], int(row["age"]), str(row["entry_date"]), keq
+        )
+
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        return list(pool.map(one, rows))
+
+
+data = read_sample_csv()
+rows = data.head(100).to_dict("records")
+
+out = run_kev_domains_many(rows, keq)
