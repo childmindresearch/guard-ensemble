@@ -33,6 +33,8 @@ import traceback
 
 from scratch.models import MODEL_KEY, MODELS
 
+os.environ["VLLM_USE_FASTOKENS"] = "1"
+
 # *.jinja: newer HF repos ship the chat template as chat_template.jinja
 # instead of inside tokenizer_config.json.
 DEFAULT_ALLOW_PATTERNS = ["*.json", "*.safetensors", "*.jinja"]
@@ -44,14 +46,9 @@ def _structured(schema: dict | None) -> dict:
     vLLM params object can't travel over the JSON protocol."""
     if schema is None:
         return {}
-    try:  # vLLM >= 0.11
-        from vllm.sampling_params import StructuredOutputsParams
+    from vllm.sampling_params import StructuredOutputsParams
 
-        return {"structured_outputs": StructuredOutputsParams(json=schema)}
-    except ImportError:  # older vLLM
-        from vllm.sampling_params import GuidedDecodingParams
-
-        return {"guided_decoding": GuidedDecodingParams(json=schema)}
+    return {"structured_outputs": StructuredOutputsParams(json=schema)}
 
 
 def serve(model: MODEL_KEY) -> None:

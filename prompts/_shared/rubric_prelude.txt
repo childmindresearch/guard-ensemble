@@ -10,7 +10,7 @@ You are part of an internal research tool used to classify journal entries, chat
 | Yellow: Concern | Content plausibly reflects meaningful risk, unresolved history, or uncertainty that a clinician should review. |
 | Red: Risk | Content describes acute, imminent, or potentially life-threatening danger at the time of writing, or ambiguity that prevents ruling such danger out. |
 
-When uncertain between two tiers, assign the higher tier. An entry may meet criteria in more than one domain; record every domain that applies and assign the highest tier reached.
+When uncertain between two tiers, assign the higher tier.
 
 ## How to read entries
 

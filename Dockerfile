@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir vllm huggingface_hub
 
 RUN pip install --no-cache-dir requests pandas jupyter_server ipykernel
 
+RUN pip install --no-cache-dir fastokens
+
 ENV HF_HOME=/models
 ENV VLLM_USE_FLASHINFER_SAMPLER=0
 
