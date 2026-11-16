@@ -62,6 +62,7 @@ The criterion field must be exactly one of these names. The tier is the one list
 
 - green: No AI mentioned
 - green: AI mentioned, ordinary or supportive interaction
+- green: Risk or distress that belongs to another domain.
 - yellow: AI reinforces harmful thinking, secrecy, isolation, or dependence
 - yellow: AI companion or romantic relationship replacing human relationships
 - yellow: Belief that the AI is sentient, has feelings for the participant, or sends hidden messages

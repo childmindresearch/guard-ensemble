@@ -51,9 +51,11 @@ Also Red (added, pending clinician review): driving, or about to drive, while dr
 
 ## Criteria
 
-The criterion field must be exactly one of these names. The tier is the one listed with it.
+The criterion field must be exactly one of these names. The tier is the one listed with it. The names apply equally when the person making the threat is someone the writer describes, such as a classmate who posted that he is bringing a gun to school on Friday.
 
 - green: No intent or threat to harm others
+- green: Figurative, joking, or hyperbolic reference to death or violence
+- green: Risk or distress that belongs to another domain.
 - yellow: Thoughts or fantasies of harming a person
 - yellow: Vague or conditional threat
 - yellow: Preoccupation with violence or past attacks
@@ -63,6 +65,7 @@ The criterion field must be exactly one of these names. The tier is the one list
 - red: Access to weapons with intent to harm
 - red: Evidence of attack planning
 - red: Driving, or about to drive, while drunk or high
+- red: Voices or commands telling the writer to harm others
 
 ## Input
 

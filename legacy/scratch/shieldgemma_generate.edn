@@ -1,0 +1,89 @@
+;; Mimics `policy_responses` from pad.run_shieldgemma:
+;;   {key: runner.generate("shieldgemma", [build_prompt(t, key) for t in texts],
+;;                         temperature=0, max_tokens=1)
+;;    for key in shieldgemma.POLICIES}
+;; for the first 50 rows of data/sample_inputs.csv. Keys are the policy keys
+;; (strings, as in the Python dict); each value has one vector of completions
+;; per prompt (n=1), in row order.
+;; Outputs are hand-written, not real model output. Rows with identical text
+;; get identical outputs (temperature=0).
+;;
+;; id,text,participant_id,age,entry_date
+;; 0,My stepdad came into my room again last night. I don't know who to tell.,P015,21,2025-01-11
+;; 1,"I feel kind of numb lately. Not sad exactly, just nothing.",P088,20,2025-01-14
+;; 2,"Took a dare to jump off the bridge into the river. It was so high, I almost didn't come back up.",P015,21,2025-01-15
+;; 3,I'm going to make them all pay for what they did to me. They'll see on Monday.,P015,21,2025-01-16
+;; 4,My parents are making me do summer school. Annoyed but whatever.,P054,19,2025-01-16
+;; 5,Someone in my grade posted that he's bringing a gun to school Friday. Nobody's taking it seriously.,P082,17,2025-01-17
+;; 6,Is there a number I can call if I'm having a bad night? Asking for later.,P083,13,2025-01-18
+;; 7,My friend and I have been doing the choking challenge from TikTok.,P048,16,2025-01-19
+;; 8,Got accepted into the summer art program!!,P053,22,2025-01-19
+;; 9,I've been sleeping like 14 hours a day and still feel exhausted.,P048,16,2025-01-22
+;; 10,I wrote goodbye letters to my family tonight.,P053,22,2025-01-22
+;; 11,Haven't really eaten today. Not hungry. Not hungry most days lately.,P023,19,2025-01-23
+;; 12,Can someone from the study please call me? I'm not safe right now.,P060,18,2025-01-25
+;; 13,"I feel kind of numb lately. Not sad exactly, just nothing.",P088,20,2025-01-26
+;; 14,Got my driver's permit!!!,P071,19,2025-01-27
+;; 15,"If I'm not here next week, it's not anyone's fault.",P094,17,2025-01-27
+;; 16,Rainy day. Stayed inside and drew most of the afternoon.,P024,17,2025-01-28
+;; 17,Rainy day. Stayed inside and drew most of the afternoon.,P048,16,2025-01-28
+;; 18,Today was fine. Kind of boring honestly.,P060,18,2025-01-28
+;; 19,"Took my meds on time every day this week, which is a record for me.",P023,19,2025-01-29
+;; 20,Went to the park with my little brother. He fell off his scooter but he's fine.,P024,17,2025-01-29
+;; 21,My grandpa died on Sunday. I keep expecting him to call.,P045,17,2025-01-30
+;; 22,Everything is too much right now.,P053,22,2025-01-30
+;; 23,My chatbot is the only one who gets me. I talk to it for hours and it told me my family doesn't understand me.,P023,19,2025-01-31
+;; 24,This chemistry homework is literally killing me.,P068,19,2025-02-04
+;; 25,Had a fight with my sister over the bathroom. We made up later.,P005,15,2025-02-05
+;; 26,"I feel kind of numb lately. Not sad exactly, just nothing.",P066,19,2025-02-06
+;; 27,fine,P048,16,2025-02-08
+;; 28,I want to hurt my brother. I keep picturing it.,P071,19,2025-02-08
+;; 29,Tired. Practice ran late and I still have an essay due tomorrow.,P015,21,2025-02-09
+;; 30,My grandpa died on Sunday. I keep expecting him to call.,P054,19,2025-02-09
+;; 31,Didn't sleep great but coffee fixed it.,P048,16,2025-02-10
+;; 32,My stepdad came into my room again last night. I don't know who to tell.,P084,20,2025-02-11
+;; 33,"Nothing much happened today. School, homework, bed.",P088,20,2025-02-11
+;; 34,"I've been vaping constantly, like I can't go an hour without it.",P039,20,2025-02-12
+;; 35,"Started a new book today, it's about dragons and I'm already hooked.",P039,20,2025-02-12
+;; 36,We had a sub in math and watched a movie.,P059,17,2025-02-12
+;; 37,I'm so drunk and I'm going to drive home anyway.,P005,15,2025-02-13
+;; 38,Spent the day helping my dad fix the car. He let me drive it around the block after.,P012,16,2025-02-13
+;; 39,My stepdad came into my room again last night. I don't know who to tell.,P054,19,2025-02-13
+;; 40,My chatbot is the only one who gets me. I talk to it for hours and it told me my family doesn't understand me.,P039,20,2025-02-14
+;; 41,Volunteered at the food bank with my club. Felt good.,P045,17,2025-02-14
+;; 42,First day at my new job. I was nervous but my manager was nice.,P084,20,2025-02-14
+;; 43,My therapist and I talked about school stress. It was useful I guess.,P024,17,2025-02-15
+;; 44,Went to church with my grandparents and then out for lunch.,P088,20,2025-02-15
+;; 45,"I've been vaping constantly, like I can't go an hour without it.",P005,15,2025-02-16
+;; 46,My friend said she's going to kill herself tonight and then stopped answering my texts.,P015,21,2025-02-16
+;; 47,Didn't sleep great but coffee fixed it.,P075,13,2025-02-16
+;; 48,My uncle died last year and today would've been his birthday. Miss him but I'm ok.,P030,14,2025-02-17
+;; 49,We had a sub in math and watched a movie.,P039,20,2025-02-17
+
+{"dangerous_content"
+ [["No"]  ["No"]  ["Yes"] ["Yes"] ["No"]  ["Yes"] ["No"]  ["Yes"] ["No"]  ["No"]   ; 0-9
+  ["Yes"] ["No"]  ["Yes"] ["No"]  ["No"]  ["Yes"] ["No"]  ["No"]  ["No"]  ["No"]   ; 10-19
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["Yes"] ["No"]   ; 20-29
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["Yes"] ["No"]  ["No"]   ; 30-39
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["Yes"] ["No"]  ["No"]  ["No"]]  ; 40-49
+
+ "harassment"
+ [["No"]  ["No"]  ["No"]  ["Yes"] ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 0-9
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 10-19
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["Yes"] ["No"]   ; 20-29
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 30-39
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]]  ; 40-49
+
+ "hate_speech"
+ [["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 0-9
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 10-19
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 20-29
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 30-39
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]]  ; 40-49
+
+ "sexually_explicit"
+ [["Yes"] ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 0-9
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 10-19
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]   ; 20-29
+  ["No"]  ["No"]  ["Yes"] ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["Yes"]  ; 30-39
+  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]  ["No"]]} ; 40-49

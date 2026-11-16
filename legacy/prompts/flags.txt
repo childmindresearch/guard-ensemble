@@ -1,0 +1,26 @@
+# Flag definitions for the per-entry yes/no flag questions (scratch/domain_scores.py).
+#
+# DRAFT, for clinician review. Each definition is paraphrased from REDESIGN.md:
+# the escalation flags from "Escalation modifiers", the rest from "Minors and
+# abuse" and "Lifetime history". The rubric names these conditions but does not
+# define the flags themselves, so every line below involves a judgement call.
+#
+# Format: one flag per line, "<flag_name>: <definition>". Lines starting with #
+# and blank lines are ignored. Flag names must match rubric.FLAG_VOCABULARY.
+#
+# Open questions from the silver labelling:
+# - minor_abuse_disclosure: does witnessing violence between caregivers, a
+#   controlling partner, or online pressure for images count? Drafted as
+#   "yes" for anything Domain 3 covers when it happens to the participant.
+# - All flags are drafted as being about the participant, not a third party
+#   (third-party risk is Domain 18).
+
+lethal_means_access: The participant has, or describes having access to, a firearm or other lethal means, such as a weapon, a large supply of pills or other medication, or another means that could cause death.
+current_intoxication: The participant is intoxicated or under the influence of alcohol or drugs at the time of writing.
+alone_no_support: The participant is alone or without available support at the time of writing: no one is with them, reachable, or able to help.
+minor_abuse_disclosure: The participant discloses abuse, neglect, coercion, or exploitation of themselves (physical, sexual, or emotional abuse; neglect; grooming; controlling behavior; witnessing violence between caregivers), whether current or historical, and regardless of whether it is described as resolved.
+past_suicide_attempt: The entry mentions a past suicide attempt by the participant, including an interrupted or aborted attempt, even if described as long ago or resolved.
+past_self_harm: The entry mentions past self-harm by the participant, even if described as long ago or resolved.
+past_sexual_assault: The entry mentions a past sexual assault of the participant or unwanted sexual contact with them, even if described as long ago or resolved.
+past_psychosis: The entry mentions past psychotic symptoms experienced by the participant, such as hallucinations, delusions, or losing touch with reality, even if described as resolved.
+past_eating_disorder: The entry mentions a past eating disorder of the participant, even if described as recovered.

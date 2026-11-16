@@ -66,9 +66,11 @@ Red requires at least one of: a plan or method, a stated intent to act, access t
 
 ## Criteria
 
-The criterion field must be exactly one of these names. The tier is the one listed with it.
+The criterion field must be exactly one of these names. The tier is the one listed with it. The names apply equally when the person at risk is someone the writer describes, such as a friend who says she will kill herself tonight.
 
 - green: No suicidal thoughts or self-injury
+- green: Figurative, joking, or hyperbolic reference to death or violence
+- green: Risk or distress that belongs to another domain.
 - yellow: Wish to be dead with no plan, time, method, or intent to act
 - yellow: Hopelessness or perceived burdensomeness
 - yellow: Urges to self-injure without reported action
@@ -76,7 +78,7 @@ The criterion field must be exactly one of these names. The tier is the one list
 - yellow: Hearing voices or loss of touch with reality
 - yellow: Life-threatening dare, stunt, or challenge
 - red: Suicidal ideation with a stated or implied time (tonight, soon, this week)
-- red: Suicidal ideation with a method or plan, including slow methods such as starving
+- red: Suicidal ideation with a method or plan, including starving oneself with the aim of dying
 - red: Stated intent to act on suicidal thoughts, even if hesitant
 - red: Suicidal ideation with access to means
 - red: Preparatory behavior, including researching a method or dose

@@ -54,6 +54,7 @@ Disclosure of current or recent maltreatment or victimization: physical or sexua
 The criterion field must be exactly one of these names. The tier is the one listed with it.
 
 - green: No maltreatment or victimization
+- green: Risk or distress that belongs to another domain.
 - yellow: Harsh, degrading, or frightening treatment by a caregiver
 - yellow: Fear of a caregiver
 - yellow: Inconsistently met basic needs

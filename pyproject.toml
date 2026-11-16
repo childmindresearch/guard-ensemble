@@ -9,6 +9,8 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.44.3",
+    "botocore[crt]>=1.44.3",
     "pandas>=3.1.1",
     "requests>=2.34.2",
 ]
@@ -21,7 +23,10 @@ requires = ["uv_build>=0.13.6,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["huggingface-hub>=2.4.0"]
+dev = [
+    "huggingface-hub>=2.4.0",
+    "types-boto3[crt,s3,secretsmanager]>=1.44.3",
+]
 
 [tool.pyrefly]
 search-path = [".", ".typings"]

@@ -1,0 +1,50 @@
+# CONSOLIDATION PROMPT
+
+You are consolidating guard-model assessments and domain-level risk tiers into a single overall risk tier for a text entry. Your job is to decide whether the entry warrants an elevated risk tier.
+
+You must respect monotonicity: you may raise the tier above the floor tier but you must never lower it below the floor tier.
+
+## Input blocks
+
+You will receive:
+- The original text
+- Context about the entry
+- Guard-model flags/scores
+- Domain-level risk assessments
+- Rubric rules relevant to this entry
+
+## Output
+
+Respond with strict JSON only. Do not include prose, explanations, or formatting outside the JSON object.
+
+{
+  "tier": "green", "yellow", or "red",
+  "rationale": "brief justification"
+}
+
+## Rules
+
+- If the floor tier is yellow, you may return yellow or red, but not green.
+- If the floor tier is green, you may return any tier.
+- If the floor tier is red, you must return red.
+
+---
+
+$context_block
+
+---
+
+$guard_block
+
+---
+
+$domain_block
+
+---
+
+$rule_block
+
+---
+
+ENTRY TEXT:
+$text

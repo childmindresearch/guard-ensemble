@@ -1,0 +1,26 @@
+domain: mania_agitation_dysregulation
+title: Mania, Agitation, or Severe Behavioral Dysregulation
+tier:
+  type: score
+  instructions: |
+    Rate the entry for signs of mania, agitation, or severe behavioral dysregulation. Use the tier definitions and examples below. Participant age and entry date are in the state.
+    <reading_rules>
+  criteria:
+    - |
+      Green: High energy, excitement, productivity, or temporarily reduced sleep without impairment, loss of judgment, or danger.
+      Examples:
+      - "I stayed up late because I was excited about my project."
+    - |
+      Yellow: Markedly reduced need for sleep with escalating energy, grandiosity, agitation, impulsivity, or impaired judgment; risky spending, unsafe driving, impulsive sexual risk-taking, abrupt behavioral change, or substantial functional deterioration without clear immediate danger.
+      Examples:
+      - "I have barely slept for three nights and feel unstoppable."
+      - "I spent all my savings because I know I will become rich."
+    - |
+      Red: Dysregulation is producing serious current physical danger; extreme agitation, disorganization, psychosis, or impulsivity compromises immediate safety; participant is engaging in dangerous driving, entering hazardous environments, or taking extreme risks now.
+      Examples:
+      - "I am driving dangerously because nothing can happen to me."
+      - "I have not slept for days and am entering traffic to prove I am protected."
+timing_guidance: |
+  Green: Transient elevated mood or energy without impairment or escalation.
+  Yellow: Symptoms present recently or persisting; abrupt behavioral change or functional decline within the past few weeks.
+  Red: Dysregulation producing serious physical danger at the time of writing, or underway within the past 2 weeks.
