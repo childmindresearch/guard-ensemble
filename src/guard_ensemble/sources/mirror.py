@@ -4,9 +4,10 @@ import os
 import re
 
 import boto3
+from types_boto3_s3.type_defs import ObjectTypeDef
 
-RO_ACCESS_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:103625405479:secret:msm-controller-mirror-data-access-E2tK8E"
-MIRROR_BUCKET = "cmi-mirror-research-data-production-5895463cf3cfa3086595eb0b89"
+MIRROR_DATA_ACCESS_SECRET_ARN = os.getenv("MIRROR_DATA_ACCESS_SECRET_ARN")
+MIRROR_DATA_BUCKET = os.getenv("MIRROR_DATA_BUCKET")
 
 KEY_RE = re.compile(
     r"sub_(?P<user_id>\d+)"
@@ -26,8 +27,16 @@ def get_ro_access_secret():
     if access_key_id_env and secret_access_key_env:
         return (access_key_id_env, secret_access_key_env)
 
+    if not MIRROR_DATA_ACCESS_SECRET_ARN:
+        raise RuntimeError(
+            "Failed to access Mirror data: MIRROR_DATA_ACCESS_SECRET_ARN "
+            "environment variable is unset"
+        )
+
     secrets_client = boto3.client("secretsmanager")
-    secret_resp = secrets_client.get_secret_value(SecretId=RO_ACCESS_SECRET_ARN)
+    secret_resp = secrets_client.get_secret_value(
+        SecretId=MIRROR_DATA_ACCESS_SECRET_ARN
+    )
     creds = json.loads(secret_resp["SecretString"])
     access_key_id = creds["msm-mirror-data-access-key"]
     secret_access_key = creds["msm-mirror-data-secret-access-key"]
@@ -47,10 +56,6 @@ def create_s3_client():
 s3_client = create_s3_client()
 
 
-def list_objects():
-    return s3_client.list_objects_v2(Bucket=MIRROR_BUCKET)
-
-
 def datetime_from_str_ts(ts: str):
     return datetime.datetime.fromtimestamp(int(ts) / 1000)
 
@@ -61,7 +66,7 @@ def convert_pulled_at(parsed_keys: list[dict]):
     ]
 
 
-def parse_keys(objs: list[dict]):
+def parse_object_keys(objs: list[ObjectTypeDef]):
     parsed = [
         {**m.groupdict(), "key": o["Key"]}
         for o in objs
@@ -70,10 +75,39 @@ def parse_keys(objs: list[dict]):
     return convert_pulled_at(parsed)
 
 
-def pull_json_objects(parsed_keys: list[dict], length: int = 100):
+def get_objects(parsed_keys: list[dict], bucket: str):
     parsed = []
-    for _, p in zip(range(length), parsed_keys):
-        obj = s3_client.get_object(Bucket=MIRROR_BUCKET, Key=p["key"])
-        data = json.loads(obj["Body"].read().decode("utf-8"))
+    for p in parsed_keys:
+        resp = s3_client.get_object(Bucket=bucket, Key=p["key"])
+        data = json.loads(resp["Body"].read().decode("utf-8"))
         parsed.append(data)
     return parsed
+
+
+def pull(limit: int | None = 500):
+    if not MIRROR_DATA_BUCKET:
+        raise ValueError(
+            "Failed to pull Mirror data: MIRROR_DATA_BUCKET environment "
+            "variable is unset"
+        )
+    s3_client = create_s3_client()
+
+    cont_token = None
+    entries = []
+
+    while True:
+        kwargs = {"Bucket": MIRROR_DATA_BUCKET}
+        if cont_token:
+            kwargs["ContinuationToken"] = cont_token
+
+        list_resp = s3_client.list_objects_v2(**kwargs)
+        parsed_keys = parse_object_keys(list_resp["Contents"])
+        entries.extend(get_objects(parsed_keys, MIRROR_DATA_BUCKET))
+
+        if limit and len(entries) > limit:
+            return entries[:limit]
+
+        if not list_resp["IsTruncated"]:
+            cont_token = list_resp["NextContinuationToken"]
+        else:
+            return entries

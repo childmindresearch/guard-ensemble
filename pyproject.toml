@@ -1,7 +1,7 @@
 [project]
 name = "guard-ensemble"
 version = "0.1.0"
-description = "Add your description here"
+description = "Risk detection pipeline employing an array of guard and domain scoring models."
 readme = "README.md"
 authors = [
   { name = "Greg Kiar", email = "gregory.kiar@childmind.org" },
@@ -10,13 +10,13 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.44.3",
-    "botocore[crt]>=1.44.3",
+    "boto3[crt]>=1.44.3",
     "pandas>=3.1.1",
     "requests>=2.34.2",
 ]
 
 [project.scripts]
-guard-ensemble = "guard_ensemble:main"
+guard-ensemble = "guard_ensemble.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]
@@ -25,7 +25,16 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "huggingface-hub>=2.4.0",
-    "types-boto3[crt,s3,secretsmanager]>=1.44.3",
+    "types-boto3[s3,secretsmanager]>=1.44.3",
+]
+# Keep `uv lock|sync` working in non-Linux environments
+gpu = [
+    "vllm>=0.11; sys_platform == 'linux'",
+    "fastokens; sys_platform == 'linux'",
+    "huggingface-hub>=2.4.0",
+]
+kernel = [
+    "ipykernel>=6.29",
 ]
 
 [tool.pyrefly]

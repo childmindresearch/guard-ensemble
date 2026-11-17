@@ -2,7 +2,6 @@ import json
 import math
 import re
 import time
-from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -20,19 +19,7 @@ from guard_ensemble.domains.config import (
 from guard_ensemble.domains.prompts import DomainPrompt, domain_prompts, render
 from guard_ensemble.domains.types import TIER_UNKNOWN, TIERS, DomainResult, Row
 from guard_ensemble.llm import runner
-
-if TYPE_CHECKING:
-    from vllm.renderers.chat_utils import ChatCompletionMessageParam
-
-
-def create_message(text: str) -> list["ChatCompletionMessageParam"]:
-    param: ChatCompletionMessageParam = {"role": "user", "content": text}
-    return [param]
-
-
-def create_messages(texts: list[str]):
-    return [create_message(t) for t in texts]
-
+from guard_ensemble.llm.lib import create_messages
 
 ## Model calls
 

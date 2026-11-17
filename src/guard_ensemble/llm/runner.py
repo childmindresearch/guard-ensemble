@@ -48,10 +48,10 @@ from pathlib import Path
 from typing import IO, Any
 
 from guard_ensemble.llm.catalog import MODEL_KEY
+from guard_ensemble.util import PACKAGE_DIR
 
-ROOT = Path(__file__).resolve().parents[1]
-LOG_DIR = Path(__file__).resolve().parent / "logs"
-PIDFILE = Path("/tmp/scratch-worker.pid")
+LOG_DIR = PACKAGE_DIR / "logs"
+PIDFILE = Path("/tmp/guard-ensemble-worker.pid")
 
 # globals().get(...) so importlib.reload(runner) keeps the running worker.
 _proc: subprocess.Popen | None = globals().get("_proc")
@@ -79,23 +79,22 @@ def load(model: MODEL_KEY) -> None:
     _kill_stale()
 
     LOG_DIR.mkdir(exist_ok=True)
-    with open(LOG_DIR / f"{model}.log", "w") as _log:
-        _proc = subprocess.Popen(
-            [sys.executable, "-m", "scratch.worker", model],
-            cwd=ROOT,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=_log,
-            text=True,
-            start_new_session=True,
-        )
-        _model = model
-        PIDFILE.write_text(str(_proc.pid))
-        try:
-            _recv()
-        except BaseException:
-            stop()
-            raise
+    _log = open(LOG_DIR / f"{model}.log", "w")  # noqa: SIM115
+    _proc = subprocess.Popen(
+        [sys.executable, "-m", "guard_ensemble.llm.worker", model],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=_log,
+        text=True,
+        start_new_session=True,
+    )
+    _model = model
+    PIDFILE.write_text(str(_proc.pid))
+    try:
+        _recv()
+    except BaseException:
+        stop()
+        raise
 
 
 def chat(
@@ -226,10 +225,6 @@ def _kill_stale() -> None:
     try:
         pid = int(PIDFILE.read_text())
     except (OSError, ValueError):
-        return
-    cmdline = Path(f"/proc/{pid}/cmdline")
-    if cmdline.exists() and b"scratch.worker" not in cmdline.read_bytes():
-        PIDFILE.unlink(missing_ok=True)  # pid reused by something else
         return
     _kill_group(pid)
     PIDFILE.unlink(missing_ok=True)

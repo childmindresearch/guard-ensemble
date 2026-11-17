@@ -6,8 +6,9 @@ out/
 scores_*.csv
 *.pyc
 raw_responses.jsonl
-/.typings
-/scratch/logs
-/.clj-kondo
-/.lsp/.cache
-/.nrepl-port
+.typings
+scratch/logs
+logs
+.clj-kondo
+.lsp/.cache
+.nrepl-port

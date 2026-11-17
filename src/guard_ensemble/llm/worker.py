@@ -31,7 +31,7 @@ import os
 import sys
 import traceback
 
-from scratch.models import MODEL_KEY, MODELS
+from guard_ensemble.llm.catalog import MODEL_KEY, MODELS
 
 os.environ["VLLM_USE_FASTOKENS"] = "1"
 

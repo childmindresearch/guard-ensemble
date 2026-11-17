@@ -1,35 +1,43 @@
-# syntax=docker/dockerfile:1
-# vLLM runtime for Llama Guard 3 8B (bf16). Needs a >=24 GB GPU (e.g. A10G).
-# Weights are NOT baked in: they download into the mounted volume on first run.
+# vLLM runtime for the guard/domain models. Expects a 24GB GPU (e.g. A10G).
+# Weights are downloaded into the mounted volume on first run.
 #
 #   docker build -t guard-ensemble .
 #
 #   docker run --gpus all \
 #     -e HOME=/tmp -e HF_TOKEN="$HF_TOKEN" \
-#     -v hf-cache:/models -v vllm-cache:/tmp/.cache/vllm -v ./scratch/logs:/app/scratch/logs \
-#     guard-ensemble <llama_guard|shieldgemma|granite_guardian|qwen_guard> "<text>"
+#     -v hf-cache:/models -v vllm-cache:/tmp/.cache/vllm \
+#     guard-ensemble
+#
+# For the long-lived Jupyter kernel see scripts/run-kernel.sh.
 
 FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir vllm huggingface_hub
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH=/opt/venv/bin:$PATH
 
-RUN pip install --no-cache-dir requests pandas jupyter_server ipykernel
+WORKDIR /app
 
-RUN pip install --no-cache-dir fastokens
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --group gpu --group kernel --no-install-project
+
+COPY README.md ./
+COPY src/ ./src/
+COPY prompts/ ./prompts/
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --group gpu --group kernel
 
 ENV HF_HOME=/models
 ENV VLLM_USE_FLASHINFER_SAMPLER=0
 
-WORKDIR /app
-
-COPY *.py /app
-
-COPY prompts/ /app/prompts/
-
-COPY scratch/ /app/scratch/
-
-ENTRYPOINT ["python", "-m", "scratch.cli"]
+ENTRYPOINT ["guard-ensemble"]
