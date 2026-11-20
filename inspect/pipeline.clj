@@ -8,7 +8,7 @@
 ;; Constants -------------------------------------------------------------------
 
 (def ROOT
-  (fs/canonicalize (fs/path (fs/parent *file*) ".." "..")))
+  (fs/canonicalize (fs/path (fs/parent *file*) "..")))
 
 (def OUT_FILES
   (->> (fs/path ROOT "out")
@@ -195,8 +195,8 @@
         (update :high-risk :accuracy)
         (update :concern :accuracy))))
 
-;; (pipeline-accuracy "key_domains_qwen3_4b_labelled_0003")
-(pipeline-accuracy "key_domains_qwen3_4b_2507_labelled_0005")
+(pipeline-accuracy "key_domains_qwen3_4b_labelled_0003")
+(pipeline-accuracy "domains_labelled_0001")
 
 (comment
   (def entries (read-jsonl (get OUT_FILES $output-stem)))

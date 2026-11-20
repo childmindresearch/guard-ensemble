@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 
-# Run Jupyter Kernel on devbox, opening sockets that will be forwarded over SSH.
+# !! DEVBOX ONLY !!
+#
+# Run Jupyter Kernel, opening sockets that will be forwarded over SSH.
+#
+# Requires Docker image been built on host via the Dockerfile at repo root:
+#
+#   $ docker build -t guard-ensemble .
+#
+# This script can be executed remotely via ssh via `ssh-kernel.sh`
 #
 # Examples:
 #
-#   scripts/run-kernel.sh            # start the kernel, no-op if already running
-#   scripts/run-kernel.sh --detach   # start the kernel in the background
-#   scripts/run-kernel.sh stop       # stop the kernel
+#   scripts/devbox/run-kernel.sh            # start the kernel, no-op if already running
+#   scripts/devbox/run-kernel.sh --detach   # start the kernel in the background
+#   scripts/devbox/run-kernel.sh stop       # stop the kernel
 #
 
 set -eou pipefail
@@ -51,6 +59,9 @@ docker run \
   --network host \
   -e HOME=/tmp \
   -e HF_TOKEN="$HF_TOKEN" \
+  -e MIRROR_DATA_ACCESS_KEY_ID \
+  -e MIRROR_DATA_SECRET_ACCESS_KEY \
+  -e MIRROR_DATA_BUCKET \
   -e JUPYTER_RUNTIME_DIR=/run/kernel \
   -v /opt/dlami/nvme/hf-cache:/models \
   -v vllm-cache:/tmp/.cache/vllm \

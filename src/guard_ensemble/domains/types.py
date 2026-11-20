@@ -1,4 +1,3 @@
-from collections.abc import Hashable
 from enum import IntEnum
 from typing import Any
 
@@ -16,5 +15,4 @@ class Tier(IntEnum):
 
 ## Common
 
-Row = dict[Hashable, Any]
 DomainResult = dict[str, Any]

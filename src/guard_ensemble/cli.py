@@ -2,14 +2,18 @@ import argparse
 import json
 from typing import Literal
 
-import pandas as pd
+import polars as pl
 
 import guard_ensemble.guards.model as guard
 
 GUARD_KEY = Literal["llama_guard", "shieldgemma", "granite_guardian", "qwen_guard"]
-GUARD_KEYS: frozenset[GUARD_KEY] = frozenset(
-    {"llama_guard", "shieldgemma", "granite_guardian", "qwen_guard"}
-)
+
+GUARD_KEYS: frozenset[GUARD_KEY] = frozenset({
+    "llama_guard",
+    "shieldgemma",
+    "granite_guardian",
+    "qwen_guard",
+})
 
 
 def main():
@@ -22,7 +26,7 @@ def main():
     model: GUARD_KEY = args.model
     csv_file: str = args.csv
 
-    df = pd.read_csv(csv_file)
+    df = pl.read_csv(csv_file, schema={"text": pl.String})
 
     if "text" not in df.columns or df["text"].dtype != "string":
         raise ValueError("Invalid CSV file: column 'text' is not of type 'string")

@@ -2,8 +2,9 @@ import json
 import math
 import re
 import time
+from typing import Any, TypedDict
 
-import pandas as pd
+import polars as pl
 
 from guard_ensemble.domains.config import (
     ESCALATION_FLAGS,
@@ -16,8 +17,9 @@ from guard_ensemble.domains.config import (
     TEMPERATURE,
     TIMING_VOCABULARY,
 )
+from guard_ensemble.domains.post_process import with_entry_tier
 from guard_ensemble.domains.prompts import DomainPrompt, domain_prompts, render
-from guard_ensemble.domains.types import TIER_UNKNOWN, TIERS, DomainResult, Row
+from guard_ensemble.domains.types import TIER_UNKNOWN, TIERS, DomainResult
 from guard_ensemble.llm import runner
 from guard_ensemble.llm.lib import create_messages
 
@@ -131,9 +133,17 @@ def chunked(items: list, size: int) -> list[list]:
     return [items[start : start + size] for start in range(0, len(items), size)]
 
 
+class DomainScore(TypedDict):
+    tier_probs: dict[str, float]
+    tier_mass: float
+
+
+type DomainScores = dict[str, DomainScore]
+
+
 def run_gate(
-    rows: list[Row], prompts: dict[str, DomainPrompt]
-) -> tuple[list[dict], dict[str, list[int]]]:
+    rows: list[dict[str, Any]], prompts: dict[str, DomainPrompt]
+) -> tuple[list[DomainScores], dict[str, list[int]]]:
     """Gate every (entry, domain) in one domain-major batch. Returns the gate
     scores per row and, per domain, the indices of the rows to rate."""
     keys = list(prompts)
@@ -146,7 +156,7 @@ def run_gate(
         max_tokens=1,
         logprobs=LOGPROBS,
     )
-    scores: list[dict] = [{} for _ in rows]
+    scores: list[DomainScores] = [{} for _ in rows]
     to_rate: dict[str, list[int]] = {key: [] for key in keys}
     for key, domain_completions in zip(keys, chunked(completions, len(rows))):
         for index, completion in enumerate(domain_completions):
@@ -219,7 +229,7 @@ def rated_result(
     return result, errors
 
 
-def unscored_result(gate_score: dict) -> DomainResult:
+def unscored_result(gate_score: DomainScore) -> DomainResult:
     """A gated-out domain: green, carrying the gate's distribution so that
     every domain has a weight."""
     probs = gate_score["tier_probs"]
@@ -235,12 +245,14 @@ def unscored_result(gate_score: dict) -> DomainResult:
 
 
 def run_rating(
-    rows: list[Row], prompts: dict[str, DomainPrompt], to_rate: dict[str, list[int]]
-) -> tuple[list[dict], list[dict], list[list[str]]]:
+    rows: list[dict[str, Any]],
+    prompts: dict[str, DomainPrompt],
+    to_rate: dict[str, list[int]],
+) -> tuple[list[dict[str, DomainResult]], list[dict], list[list[str]]]:
     """Rate the pairs that passed the gate, one batch per domain since each has
     its own grammar. Returns per-row results, raw model texts and errors, with
     only the rated domains filled in."""
-    results: list[dict] = [{} for _ in rows]
+    rated: list[dict] = [{} for _ in rows]
     raw: list[dict] = [{} for _ in rows]
     errors: list[list[str]] = [[] for _ in rows]
     for key, prompt in prompts.items():
@@ -255,16 +267,16 @@ def run_rating(
         )
         for index, completion in zip(indices, completions):
             result, domain_errors = rated_result(completion, prompt.criterion_tiers)
-            results[index][key] = result
+            rated[index][key] = result
             raw[index][key] = completion["text"]
             errors[index] += [f"{key}: {error}" for error in domain_errors]
-    return results, raw, errors
+    return rated, raw, errors
 
 
-def run(entries: pd.DataFrame) -> pd.DataFrame:
+def run(df: pl.DataFrame) -> pl.DataFrame:
     """Gate every (entry, domain), rate the pairs that pass, and fill the rest
     in as unscored greens."""
-    rows = entries.to_dict("records")
+    rows = df.to_dicts()
     prompts = domain_prompts()
     scores, to_rate = run_gate(rows, prompts)
     rated, raw, errors = run_rating(rows, prompts, to_rate)
@@ -275,13 +287,21 @@ def run(entries: pd.DataFrame) -> pd.DataFrame:
         }
         for index in range(len(rows))
     ]
-    out = entries.copy()
-    out["gate_scores"] = scores
-    out["domain_results"] = results
-    out["domain_incomplete"] = [
+    incomplete = [
         any(result["tier"] == TIER_UNKNOWN for result in row.values())
         for row in results
     ]
-    out["custom_prompt_errors"] = [";".join(row) for row in errors]
-    out["domain_raw"] = raw
-    return out
+    cp_errors = [";".join(row) for row in errors]
+
+    raw_keys = sorted({k for d in raw for k in d})
+    raw_dtype = pl.Struct({k: pl.String for k in raw_keys})
+
+    out = df.clone().with_columns(
+        pl.Series(scores).alias("gate_scores"),
+        pl.Series(results).alias("domain_results"),
+        pl.Series(incomplete).alias("domain_incomplete"),
+        pl.Series(cp_errors).alias("custom_prompt_errors"),
+        pl.Series(raw, dtype=raw_dtype).alias("domain_raw"),
+    )
+
+    return with_entry_tier(out)

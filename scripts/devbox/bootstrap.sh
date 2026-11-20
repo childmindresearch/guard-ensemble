@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# !! DEVBOX ONLY !!
+#
+# - Sync HuggingFace from EBS -> NVMe temporary storage - increases model load
+#   times as an EC2 instance's NVMe storage bandwidth is far greater than a
+#   long-lived EBS volume
+# - Wipe old kernel sockets in the /tmp/svim-k temp dir, reset permissions
+#
+
 set -eou pipefail
 
 SRC=$(docker volume inspect hf-cache --format '{{ .Mountpoint }}')

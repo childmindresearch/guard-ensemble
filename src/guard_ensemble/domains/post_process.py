@@ -1,10 +1,11 @@
 import re
+from typing import Any, TypedDict
 
-import pandas as pd
+import polars as pl
 
 from guard_ensemble.domains import tiers
 from guard_ensemble.domains.config import RED_RAISE
-from guard_ensemble.domains.types import TIER_UNKNOWN, DomainResult, Row, Tier
+from guard_ensemble.domains.types import TIER_UNKNOWN, DomainResult, Tier
 
 
 def normalised_words(text: str) -> str:
@@ -55,12 +56,20 @@ def effective_tier(result: DomainResult) -> str:
     return "red" if raisable and probability_red >= RED_RAISE else result["tier"]
 
 
-def participant_age(row: Row) -> int | None:
-    age = row.get("age")
-    return None if age is None or pd.isna(age) else int(age)
+class EntryTier(TypedDict):
+    entry_tier: str
+    entry_reasons: list[str]
+    yellow_concerns: list[list[str]]
 
 
-def entry_tier(row: Row) -> dict:
+ENTRY_TIER_SCHEMA = {
+    "entry_tier": pl.String,
+    "entry_reasons": pl.List(pl.String),
+    "yellow_concerns": pl.List(pl.List(pl.String)),
+}
+
+
+def entry_tier(row: dict[str, Any]) -> EntryTier:
     """The entry's final tier, the reasons for it, and the yellow concerns."""
     results: dict[str, DomainResult] = row["domain_results"]
     eff_tiers = {domain: effective_tier(result) for domain, result in results.items()}
@@ -83,7 +92,7 @@ def entry_tier(row: Row) -> dict:
 
     highest = tiers.highest_tier(known_tiers)
     escalation = tiers._escalate(highest.tier, flags, len(concerns))
-    minimum = tiers._minimums(participant_age(row), flags)
+    minimum = tiers._minimums(row.get("age"), flags)
     incomplete = bool(row.get("domain_incomplete")) or highest.incomplete
     unknown = tiers._unknown_floor(incomplete)
     final = tiers.floor_tier(
@@ -95,18 +104,15 @@ def entry_tier(row: Row) -> dict:
         minimum.reasons,
         unknown.reasons,
     )
+    reasons = [f"red_probability:{domain}" for domain in raised] + final.reasons
     return {
         "entry_tier": final.tier.name,
-        "entry_reasons": [f"red_probability:{domain}" for domain in raised]
-        + final.reasons,
+        "entry_reasons": reasons,
         "yellow_concerns": concerns,
     }
 
 
-def with_entry_tier(results: pd.DataFrame) -> pd.DataFrame:
+def with_entry_tier(df: pl.DataFrame) -> pl.DataFrame:
     """Add entry_tier, entry_reasons and yellow_concerns. Works on a saved run."""
-    out = results.copy()
-    tiers = [entry_tier(row) for row in results.to_dict("records")]
-    for column in ("entry_tier", "entry_reasons", "yellow_concerns"):
-        out[column] = [tier[column] for tier in tiers]
-    return out
+    tiers = [entry_tier(row) for row in df.iter_rows(named=True)]
+    return df.hstack(pl.from_dicts(tiers, schema=ENTRY_TIER_SCHEMA))

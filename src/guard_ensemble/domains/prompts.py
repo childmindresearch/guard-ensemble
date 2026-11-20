@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+from typing import Any
 
 from guard_ensemble.domains.config import (
     DOMAIN_PROMPTS_DIR,
@@ -11,7 +12,7 @@ from guard_ensemble.domains.config import (
     OUTPUT_SCHEMA_TXT,
     PRELUDE_TXT,
 )
-from guard_ensemble.domains.types import TIERS, Row
+from guard_ensemble.domains.types import TIERS
 
 ## Prompts
 #
@@ -137,7 +138,9 @@ def domain_prompts() -> dict[str, DomainPrompt]:
     }
 
 
-def render(template: str, row: Row) -> str:
+def render(template: str, row: dict[str, Any]) -> str:
     return Template(template).substitute(
-        text=row["text"], age=str(row["age"]), entry_date=str(row["entry_date"])
+        text=row.get("text"),
+        age=str(row.get("age")),
+        entry_date=str(row.get("entry_date")),
     )

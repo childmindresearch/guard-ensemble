@@ -7,12 +7,16 @@ authors = [
   { name = "Greg Kiar", email = "gregory.kiar@childmind.org" },
   { name = "Amani del Pilar", email = "amani.del_pilar@childmind.org" },
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
-    "boto3>=1.44.3",
-    "boto3[crt]>=1.44.3",
-    "pandas>=3.1.1",
-    "requests>=2.34.2",
+  "boto3>=1.44.3",
+  "boto3[crt]>=1.44.3",
+  "pandas>=3.1.1",
+  "pandera[polars]>=0.36.0",
+  "polars>=2.1.0",
+  "pydantic>=2.14.3",
+  "requests>=2.34.2",
+  "rich>=15.0.0",
 ]
 
 [project.scripts]
@@ -23,19 +27,21 @@ requires = ["uv_build>=0.13.6,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "huggingface-hub>=2.4.0",
-    "types-boto3[s3,secretsmanager]>=1.44.3",
-]
+dev = ["huggingface-hub>=2.4.0", "types-boto3[s3,secretsmanager]>=1.44.3"]
 # Keep `uv lock|sync` working in non-Linux environments
 gpu = [
-    "vllm>=0.11; sys_platform == 'linux'",
-    "fastokens; sys_platform == 'linux'",
-    "huggingface-hub>=2.4.0",
+  "vllm>=0.11; sys_platform == 'linux'",
+  "fastokens; sys_platform == 'linux'",
+  "mistralrs==0.9.5+cuda132.sm86; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "huggingface-hub>=2.4.0",
 ]
-kernel = [
-    "ipykernel>=6.29",
-]
+kernel = ["ipykernel>=6.29"]
+
+[tool.uv]
+find-links = ["https://github.com/EricLBuehler/mistral.rs/releases/expanded_assets/v0.9.5"]
 
 [tool.pyrefly]
 search-path = [".", ".typings"]
+
+[tool.ruff.format]
+preview = true
