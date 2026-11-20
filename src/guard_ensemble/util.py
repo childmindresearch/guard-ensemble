@@ -37,18 +37,6 @@ def to_dtype(tp: Any) -> Any:
     return pl.DataType.from_python(tp)
 
 
-# def polars_schema(model: type[BaseModel]) -> dict[str, Any]:
-#     out: dict[str, Any] = {}
-#     for name, field in model.model_fields.items():
-#         try:
-#             out[name] = to_dtype(field.annotation)
-#         except TypeError as e:
-#             raise TypeError(
-#                 f"{model.__name__}.{name} ({field.annotation!r}): {e}"
-#             ) from e
-#     return out
-
-
 def polars_schema(model: type[BaseModel]) -> dict[str, Any]:
     return {n: to_dtype(f.annotation) for n, f in model.model_fields.items()}
 
@@ -112,12 +100,15 @@ def load_input_csv(
     return validate_frame(CsvEntry, csv_df.head(_limit) if _limit else csv_df)
 
 
-def save_out_jsonl(results: pl.DataFrame, name: str) -> Path:
-    OUT_DIR.mkdir(exist_ok=True)
-    path = OUT_DIR / f"{name}.jsonl"
+def save_out_jsonl(
+    results: pl.DataFrame, name: str, out_dir: Path | None = OUT_DIR
+) -> Path:
+    out_dir = out_dir if out_dir else OUT_DIR
+    out_dir.mkdir(exist_ok=True)
+    path = out_dir / f"{name}.jsonl"
     results.write_ndjson(path)
     return path
 
 
-def load_out_jsonl(name: str) -> pl.DataFrame:
-    return pl.read_ndjson(OUT_DIR / f"{name}.jsonl")
+def load_out_jsonl(name: str, out_dir: Path = OUT_DIR) -> pl.DataFrame:
+    return pl.read_ndjson(out_dir / f"{name}.jsonl")

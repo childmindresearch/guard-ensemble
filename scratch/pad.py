@@ -4,7 +4,8 @@ import polars as pl
 
 import guard_ensemble.domains.model as domains
 import guard_ensemble.domains.post_process as pproc
-from guard_ensemble import util
+import guard_ensemble.guards.model as guards
+from guard_ensemble import dispatch, util
 from guard_ensemble.llm import catalog, runner, worker
 from guard_ensemble.sources import mirror
 
@@ -12,25 +13,28 @@ from guard_ensemble.sources import mirror
 def reload_modules():
     import importlib
 
-    importlib.reload(pproc)
-    importlib.reload(domains)
-    importlib.reload(util)
     importlib.reload(catalog)
-    importlib.reload(worker)
+    importlib.reload(domains)
+    importlib.reload(pproc)
+    importlib.reload(guards)
+    importlib.reload(util)
     importlib.reload(runner)
+    importlib.reload(worker)
+    importlib.reload(mirror)
+    importlib.reload(dispatch)
 
 
 runner.stop()
 
 reload_modules()
 
+## Benchmark Data --------------------------------------------------------------
+
 labelled_data, _ = util.load_input_csv("data/labelled_clinician_inputs.csv")
 
 llm_mock_data, _ = util.load_input_csv("data/sample_inputs.csv")
 
-res = domains.run(labelled_data)
-
-", ".join(res.columns)
+res, _ = domains.run(labelled_data)
 
 # res = domains.run(llm_mock_data)
 
@@ -42,7 +46,13 @@ records = mirror.pull(limit=1000)
 
 mirror_df = mirror.select_msm_frame(mirror.frame_records(records))
 
-mres = domains.run(mirror_df)
+##
+
+dispatch.run_all(mirror_df, util.PACKAGE_DIR / "out" / "dispatch")
+
+##
+
+mres, _ = domains.run(mirror_df)
 
 m_unsafe = mres.filter((pl.col("concerning") == True) | (pl.col("high_risk") == True))
 d_unsafe = mres.remove(entry_tier="green")

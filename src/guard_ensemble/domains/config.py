@@ -1,4 +1,4 @@
-from guard_ensemble.llm.catalog import MODEL_KEY
+from guard_ensemble.llm.catalog import Model
 from guard_ensemble.util import PACKAGE_DIR
 
 ## Paths
@@ -50,7 +50,7 @@ _ALL_KNOWN_FLAGS = set(ESCALATION_FLAGS) | set(MINIMUM_FLAGS)
 
 ## Model
 
-MODEL: MODEL_KEY = "qwen3_4b_2507"
+MODEL: Model = "qwen3_4b_2507"
 
 TEMPERATURE = 0
 

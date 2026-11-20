@@ -47,7 +47,7 @@ import time
 from pathlib import Path
 from typing import IO, Any
 
-from guard_ensemble.llm.catalog import MODEL_KEY
+from guard_ensemble.llm.catalog import Model
 from guard_ensemble.util import PACKAGE_DIR
 
 LOG_DIR = PACKAGE_DIR / "logs"
@@ -70,7 +70,7 @@ def current() -> str | None:
     return None
 
 
-def load(model: MODEL_KEY) -> None:
+def load(model: Model) -> None:
     """Make sure `model` is loaded, replacing any other model."""
     global _proc, _model, _log
     if current() == model:
@@ -98,7 +98,7 @@ def load(model: MODEL_KEY) -> None:
 
 
 def chat(
-    model: MODEL_KEY,
+    model: Model,
     conversations: list,
     chat_template_kwargs: dict | None = None,
     timeout: float | None = None,
@@ -116,7 +116,7 @@ def chat(
 
 
 def generate(
-    model: MODEL_KEY,
+    model: Model,
     prompts: list[str],
     timeout: float | None = None,
     **sampling,
@@ -155,7 +155,7 @@ atexit.register(stop)
 
 
 def _request(
-    model: MODEL_KEY,
+    model: Model,
     mode: str,
     inputs: list,
     sampling: dict,

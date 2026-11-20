@@ -23,7 +23,7 @@ NAME=guard-kernel
 IMAGE=guard-ensemble
 RUNTIME_DIR=/tmp/svim-k
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 if [[ "${1:-}" == "stop" ]]; then
   docker rm -f "$NAME" >/dev/null 2>&1 && echo "stopped $NAME" || echo "$NAME not running"

@@ -31,13 +31,14 @@ import os
 import sys
 import traceback
 
-from guard_ensemble.llm.catalog import MODEL_KEY, MODELS
+from guard_ensemble.llm.catalog import (
+    DEFAULT_ALLOW_PATTERNS,
+    MODEL_KEYS,
+    Model,
+    model_config,
+)
 
 os.environ["VLLM_USE_FASTOKENS"] = "1"
-
-# *.jinja: newer HF repos ship the chat template as chat_template.jinja
-# instead of inside tokenizer_config.json.
-DEFAULT_ALLOW_PATTERNS = ["*.json", "*.safetensors", "*.jinja"]
 
 
 def _structured(schema: dict | None) -> dict:
@@ -51,7 +52,7 @@ def _structured(schema: dict | None) -> dict:
     return {"structured_outputs": StructuredOutputsParams(json=schema)}
 
 
-def serve(model: MODEL_KEY) -> None:
+def serve(model: Model) -> None:
     proto = os.fdopen(os.dup(1), "w")
     os.dup2(2, 1)
 
@@ -63,10 +64,10 @@ def serve(model: MODEL_KEY) -> None:
         from huggingface_hub import snapshot_download
         from vllm import LLM, SamplingParams
 
-        if model not in MODELS:
+        if model not in MODEL_KEYS:
             raise ValueError(f"Unsupported model: {model}")
 
-        spec = MODELS[model]
+        spec = model_config(model)
         path = snapshot_download(
             spec["repo"],
             allow_patterns=spec.get("allow_patterns", DEFAULT_ALLOW_PATTERNS),
@@ -125,6 +126,6 @@ def _completion(c, with_logprobs: bool):
 
 if __name__ == "__main__":
     model = sys.argv[1]
-    if model not in MODELS:
+    if model not in MODEL_KEYS:
         raise ValueError(f"Unsupported model: {model}")
     serve(model)

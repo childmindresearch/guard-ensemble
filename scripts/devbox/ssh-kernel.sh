@@ -51,9 +51,9 @@
 set -eou pipefail
 
 KEY="$1"
-ENVFILE="${2:-~/.private/.env.kernel.age}"
-TO_HOST="$3:-devbox"
-REPO_DIR="$3:-/home/ubuntu/sync/guard-ensemble"
+ENVFILE="${2:-$HOME/.private/.env.kernel.age}"
+TO_HOST="${3:-devbox}"
+REPO_DIR="${4:-/home/ubuntu/sync/guard-ensemble}"
 
 env_contents=$(age -d -i "$KEY" "$ENVFILE")
 remote_cmd="set -a; . /dev/stdin; set +a; cd -- $(printf '%q' "$REPO_DIR") && exec ./scripts/devbox/run-kernel.sh"

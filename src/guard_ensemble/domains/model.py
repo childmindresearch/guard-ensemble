@@ -273,9 +273,13 @@ def run_rating(
     return rated, raw, errors
 
 
-def run(df: pl.DataFrame) -> pl.DataFrame:
+def run(df: pl.DataFrame, validate=False) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Gate every (entry, domain), rate the pairs that pass, and fill the rest
     in as unscored greens."""
+
+    if validate:
+        print("WARN: Domain model input validation is TBD")
+
     rows = df.to_dicts()
     prompts = domain_prompts()
     scores, to_rate = run_gate(rows, prompts)
@@ -296,7 +300,7 @@ def run(df: pl.DataFrame) -> pl.DataFrame:
     raw_keys = sorted({k for d in raw for k in d})
     raw_dtype = pl.Struct({k: pl.String for k in raw_keys})
 
-    out = df.clone().with_columns(
+    out = df.with_columns(
         pl.Series(scores).alias("gate_scores"),
         pl.Series(results).alias("domain_results"),
         pl.Series(incomplete).alias("domain_incomplete"),
@@ -304,4 +308,4 @@ def run(df: pl.DataFrame) -> pl.DataFrame:
         pl.Series(raw, dtype=raw_dtype).alias("domain_raw"),
     )
 
-    return with_entry_tier(out)
+    return with_entry_tier(out), df.clone().clear()
